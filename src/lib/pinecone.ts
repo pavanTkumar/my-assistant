@@ -7,16 +7,15 @@ let pineconeClient: Pinecone | null = null;
 
 export const initPinecone = async (): Promise<Pinecone> => {
   if (!pineconeClient) {
-    // Try simplest configuration without environment property
     pineconeClient = new Pinecone({
-      apiKey: process.env.PINECONE_API_KEY || ''
-      // Remove environment completely to see if that works
+      apiKey: process.env.PINECONE_API_KEY || '',
+      environment: process.env.PINECONE_ENVIRONMENT || '' // Add back the environment property
     });
   }
   return pineconeClient;
 };
 
-// The rest of your file remains unchanged
+// Get Pinecone index
 export const getPineconeIndex = async (): Promise<Index> => {
   const pinecone = await initPinecone();
   return pinecone.index(process.env.PINECONE_INDEX || '');
