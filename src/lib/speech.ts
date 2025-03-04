@@ -19,6 +19,19 @@ interface SpeechRecognitionEvent extends Event {
     transcript: string;
   }
   
+  // Create a proper type for SpeechRecognition
+  interface SpeechRecognitionInstance extends EventTarget {
+    continuous: boolean;
+    interimResults: boolean;
+    lang: string;
+    start(): void;
+    stop(): void;
+    abort(): void;
+    onresult: ((this: SpeechRecognitionInstance, ev: SpeechRecognitionEvent) => any) | null;
+    onerror: ((this: SpeechRecognitionInstance, ev: any) => any) | null;
+    onend: ((this: SpeechRecognitionInstance, ev: Event) => any) | null;
+  }
+  
   // Start speech recognition
   export const startSpeechRecognition = (
     onTranscript: (text: string) => void,
@@ -28,7 +41,8 @@ interface SpeechRecognitionEvent extends Event {
     // Check if browser supports Speech Recognition
     if (typeof window === 'undefined') return null;
     
-    const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+    // Fix: Use type assertion to avoid TypeScript error
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
     if (!SpeechRecognition) {
       onError('Speech recognition is not supported in this browser. Try Chrome, Edge, or Safari.');
@@ -106,9 +120,9 @@ interface SpeechRecognitionEvent extends Event {
     
     // Find a good voice if available
     const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(voice => 
-      voice.name.includes('Google') || 
-      voice.name.includes('Natural') || 
+    const preferredVoice = voices.find(voice =>
+      voice.name.includes('Google') ||
+      voice.name.includes('Natural') ||
       voice.name.includes('Samantha')
     );
     
@@ -122,6 +136,5 @@ interface SpeechRecognitionEvent extends Event {
     
     // Speak
     window.speechSynthesis.speak(utterance);
-    
     return true;
   };

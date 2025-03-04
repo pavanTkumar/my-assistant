@@ -7,10 +7,17 @@ let pineconeClient: Pinecone | null = null;
 
 export const initPinecone = async (): Promise<Pinecone> => {
   if (!pineconeClient) {
-    pineconeClient = new Pinecone({
-      apiKey: process.env.PINECONE_API_KEY || '',
-      environment: process.env.PINECONE_ENVIRONMENT || '' // Add back the environment property
-    });
+    // Create config and add environment if needed for deployment
+    const config: any = {
+      apiKey: process.env.PINECONE_API_KEY || ''
+    };
+    
+    // Add environment property if it exists in env vars
+    if (process.env.PINECONE_ENVIRONMENT) {
+      config.environment = process.env.PINECONE_ENVIRONMENT;
+    }
+    
+    pineconeClient = new Pinecone(config);
   }
   return pineconeClient;
 };
