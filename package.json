@@ -1,0 +1,36 @@
+{
+  "name": "myai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "init-pinecone": "npx ts-node scripts/init-pinecone.ts"
+  },
+  "dependencies": {
+    "@langchain/openai": "^0.0.14",
+    "@pinecone-database/pinecone": "^1.1.2",
+    "axios": "^1.6.5",
+    "google-auth-library": "^9.4.1",
+    "googleapis": "^129.0.0",
+    "langchain": "^0.1.2",
+    "next": "14.0.4",
+    "openai": "^4.24.7",
+    "react": "^18",
+    "react-dom": "^18",
+    "twilio": "^4.20.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@types/uuid": "^9.0.7",
+    "eslint": "^8",
+    "eslint-config-next": "14.0.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5"
+  }
+}
