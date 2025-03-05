@@ -109,8 +109,14 @@ export const seedPineconeWithData = async (): Promise<boolean> => {
       His expertise includes machine learning, natural language processing, and cloud-based 
       solutions. Pavan is passionate about helping businesses transform their operations 
       through intelligent automation.
+
     `;
-    
+    const eduDetails = ` Bachelors in Computer Science from KL University graduated in the year 2022 and he had completed his masters n Information Systems at George Mason University in 2024 and he completed schooling at Harvest Public School {Location: Khammam,Tel;angana}`;
+    const likeAbouts =  ` 
+    He likes Chciken Dum Biryani and Sambar Rice which is a very famous south Indian dish in South India.
+    He likes to explore the world and all the comunities al over the world one day!
+    His crush is Kayadu Lohar.
+    `
     const servicesData = `
       Services offered by Pavan Tejavath:
       
@@ -133,8 +139,8 @@ export const seedPineconeWithData = async (): Promise<boolean> => {
       Email: pavan@thetejavath.com
       Website: https://thetejavath.com
       
-      For appointments: Use the booking system on the website to schedule a meeting.
-      For urgent matters: Send a message marked as urgent through the website.
+      For appointments: Use the booking system in the assiatant to schedule a meeting.
+      For urgent matters: Send a message marked as urgent through the assistant.
       
       Pavan typically responds to inquiries within 24-48 hours.
     `;
@@ -143,6 +149,8 @@ export const seedPineconeWithData = async (): Promise<boolean> => {
     await addDocument(bioData, { type: 'bio', title: 'About Pavan Tejavath' });
     await addDocument(servicesData, { type: 'services', title: 'Services Offered' });
     await addDocument(contactInfo, { type: 'contact', title: 'Contact Information' });
+    await addDocument(eduDetails, { type: 'Education', title: 'Education details of Pavan Tejavath' });
+    await addDocument(likeAbouts, { type: 'Likes', title: 'What does Pavan Tejavath likes?' });
     
     return true;
   } catch (error) {
