@@ -1,6 +1,7 @@
 import { Pinecone, Index } from '@pinecone-database/pinecone';
 import { Document } from 'langchain/document';
 import { OpenAIEmbeddings } from '@langchain/openai';
+import fs from 'fs';
 
 // Initialize Pinecone client
 let pineconeClient: Pinecone | null = null;
@@ -94,6 +95,75 @@ export const similaritySearch = async (
   }
 };
 
+// NEW FUNCTION: Upload a text file to Pinecone
+export const uploadFileToVectorDB = async (
+  filePath: string,
+  type: string = 'document'
+): Promise<{success: boolean; message: string}> => {
+  try {
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return { 
+        success: false, 
+        message: `File not found: ${filePath}` 
+      };
+    }
+    
+    // Read the file content
+    const content = fs.readFileSync(filePath, 'utf-8');
+    
+    // Get filename for metadata
+    const filename = filePath.split('/').pop() || filePath;
+    
+    // Create metadata
+    const metadata = {
+      type,
+      source: filename,
+      uploadDate: new Date().toISOString()
+    };
+    
+    // Split content into chunks if it's very large (over 4000 chars)
+    if (content.length > 4000) {
+      // Simple chunk splitting (for very large texts)
+      const chunks = [];
+      let i = 0;
+      while (i < content.length) {
+        chunks.push(content.slice(i, i + 4000));
+        i += 3800; // Overlapping chunks for better context preservation
+      }
+      
+      // Upload each chunk
+      let chunkCount = 0;
+      for (let i = 0; i < chunks.length; i++) {
+        await addDocument(chunks[i], {
+          ...metadata,
+          chunk: i + 1,
+          totalChunks: chunks.length
+        });
+        chunkCount++;
+      }
+      
+      return { 
+        success: true, 
+        message: `Successfully uploaded file. Split into ${chunkCount} chunks.` 
+      };
+    } else {
+      // Upload as single document if it's small
+      await addDocument(content, metadata);
+      return { 
+        success: true, 
+        message: 'Successfully uploaded file.' 
+      };
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      success: false,
+      message: `Error uploading file: ${errorMessage}`
+    };
+  }
+};
+
 // Initialize Pinecone with seed data about Pavan
 export const seedPineconeWithData = async (): Promise<boolean> => {
   try {
@@ -109,14 +179,8 @@ export const seedPineconeWithData = async (): Promise<boolean> => {
       His expertise includes machine learning, natural language processing, and cloud-based 
       solutions. Pavan is passionate about helping businesses transform their operations 
       through intelligent automation.
-
     `;
-    const eduDetails = ` Bachelors in Computer Science from KL University graduated in the year 2022 and he had completed his masters n Information Systems at George Mason University in 2024 and he completed schooling at Harvest Public School {Location: Khammam,Tel;angana}`;
-    const likeAbouts =  ` 
-    He likes Chciken Dum Biryani and Sambar Rice which is a very famous south Indian dish in South India.
-    He likes to explore the world and all the comunities al over the world one day!
-    His crush is Kayadu Lohar.
-    `
+    
     const servicesData = `
       Services offered by Pavan Tejavath:
       
@@ -139,8 +203,8 @@ export const seedPineconeWithData = async (): Promise<boolean> => {
       Email: pavan@thetejavath.com
       Website: https://thetejavath.com
       
-      For appointments: Use the booking system in the assiatant to schedule a meeting.
-      For urgent matters: Send a message marked as urgent through the assistant.
+      For appointments: Use the booking system on the website to schedule a meeting.
+      For urgent matters: Send a message marked as urgent through the website.
       
       Pavan typically responds to inquiries within 24-48 hours.
     `;
@@ -149,8 +213,6 @@ export const seedPineconeWithData = async (): Promise<boolean> => {
     await addDocument(bioData, { type: 'bio', title: 'About Pavan Tejavath' });
     await addDocument(servicesData, { type: 'services', title: 'Services Offered' });
     await addDocument(contactInfo, { type: 'contact', title: 'Contact Information' });
-    await addDocument(eduDetails, { type: 'Education', title: 'Education details of Pavan Tejavath' });
-    await addDocument(likeAbouts, { type: 'Likes', title: 'What does Pavan Tejavath likes?' });
     
     return true;
   } catch (error) {

@@ -1,0 +1,14 @@
+Name: Pavan Tejavath
+Origin: India (Telangana)
+
+Education:
+- Bachelor’s degree from KL University, Hyderabad, India
+- Master’s in Information Systems from George Mason University, Fairfax, VA, USA
+
+Technical Skills & Expertise:
+- Programming Languages: HTML, CSS, JavaScript, Java, Dart, Python
+- Front-end & Mobile Frameworks: React.JS, Backbone.JS, Vue.JS, Flutter, React Native
+- Advanced Technologies: RAG Agents, LangChain, GlangGraph, Llama Index, vector databases, NoSQL, SQL/MySQL
+
+Profile Summary:
+I am a tech enthusiast with a passion for leveraging cutting-edge technologies and frameworks. My diverse educational background and hands-on experience in multiple programming languages and modern development tools empower me to innovate and create efficient solutions. With a solid foundation in both front-end and mobile application development, I continually strive to expand my expertise in emerging areas like AI-driven agents and advanced data management systems.
