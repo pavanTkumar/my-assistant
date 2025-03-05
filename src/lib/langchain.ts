@@ -6,7 +6,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 // Initialize OpenAI Chat Model
 const model = new ChatOpenAI({
   openAIApiKey: process.env.OPENAI_API_KEY,
-  modelName: 'gpt-3.5-turbo', // Can be upgraded to GPT-4 for better results
+  modelName: 'gpt-4o-mini', 
   temperature: 0.7,
 });
 
