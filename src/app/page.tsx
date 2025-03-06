@@ -376,6 +376,7 @@ export default function Home() {
         
         <footer className={styles.footer}>
           I am The Tejavath's Assistant. I can't make any mistakes! ;)
+          Developed by Pavan Tejavath.
         </footer>
       </main>
       
