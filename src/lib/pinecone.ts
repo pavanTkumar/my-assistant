@@ -13,11 +13,6 @@ export const initPinecone = async (): Promise<Pinecone> => {
       apiKey: process.env.PINECONE_API_KEY || ''
     };
     
-    // Add environment property if it exists in env vars
-    if (process.env.PINECONE_ENVIRONMENT) {
-      config.environment = process.env.PINECONE_ENVIRONMENT;
-    }
-    
     pineconeClient = new Pinecone(config);
   }
   return pineconeClient;
