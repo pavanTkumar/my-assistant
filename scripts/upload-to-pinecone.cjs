@@ -1,11 +1,9 @@
-// scripts/upload-to-pinecone.ts
+// scripts/upload-to-pinecone.cjs
 
-import { uploadFileToVectorDB } from '../src/lib/pinecone';
-import path from 'path';
-import fs from 'fs';
+const fs = require('fs');
+const path = require('path');
 
 // Load environment variables from .env.local manually
-// (This avoids the dotenv dependency)
 try {
   const envPath = path.resolve(process.cwd(), '.env.local');
   if (fs.existsSync(envPath)) {
@@ -24,16 +22,34 @@ try {
   console.warn('Could not load .env.local file:', error);
 }
 
-const main = async () => {
+// Import pinecone module using require
+// Note: we're importing the compiled JS file, not the TS file
+let pinecone;
+try {
+  // First try the production build path
+  pinecone = require('../.next/server/app/lib/pinecone');
+} catch (error) {
+  try {
+    // Fallback to direct TS file (this works if you have ts-node properly configured)
+    pinecone = require('../src/lib/pinecone');
+  } catch (innerError) {
+    console.error('Error importing pinecone module:', innerError);
+    console.log('You may need to build your project first with "npm run build"');
+    console.log('Or ensure your pinecone.ts file is properly accessible');
+    process.exit(1);
+  }
+}
+
+async function main() {
   const args = process.argv.slice(2);
   
   if (args.length === 0) {
     console.log('Usage:');
-    console.log('  npx ts-node scripts/upload-to-pinecone.ts <file.txt>');
-    console.log('  npx ts-node scripts/upload-to-pinecone.ts <file.txt> <document_type>');
+    console.log('  node scripts/upload-to-pinecone.cjs <file.txt>');
+    console.log('  node scripts/upload-to-pinecone.cjs <file.txt> <document_type>');
     console.log('\nExample:');
-    console.log('  npx ts-node scripts/upload-to-pinecone.ts my-bio.txt bio');
-    console.log('  npx ts-node scripts/upload-to-pinecone.ts my-services.txt services');
+    console.log('  node scripts/upload-to-pinecone.cjs my-bio.txt bio');
+    console.log('  node scripts/upload-to-pinecone.cjs my-services.txt services');
     return;
   }
   
@@ -61,7 +77,7 @@ const main = async () => {
       
       // Process each file
       for (const file of files) {
-        const result = await uploadFileToVectorDB(file, docType);
+        const result = await pinecone.uploadFileToVectorDB(file, docType);
         console.log(`${file}: ${result.message}`);
         
         if (result.success) successCount++;
@@ -74,12 +90,12 @@ const main = async () => {
       
     } else {
       // Process single file
-      const result = await uploadFileToVectorDB(filePath, docType);
+      const result = await pinecone.uploadFileToVectorDB(filePath, docType);
       console.log(result.message);
     }
   } catch (error) {
     console.error('Error:', error instanceof Error ? error.message : String(error));
   }
-};
+}
 
 main().catch(console.error);
