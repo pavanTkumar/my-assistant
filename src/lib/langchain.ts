@@ -34,7 +34,7 @@ const detectTone = async (input: string): Promise<'ego' | 'polite' | 'casual' | 
 
 // Telugu-English detection
 const isTeluguEnglish = (input: string): boolean => {
-  const teluguMarkers = ['ra', 'le', 'baabu', 'cheppu', 'inka', 'odiki', 'ante', 'em'];
+  const teluguMarkers = ['ra', 'le', 'baabu', 'cheppu', 'inka', 'odiki', 'ante', 'em', 'enduku', 'enduk', 'emaina'];
   return teluguMarkers.some(word => input.toLowerCase().includes(word));
 };
 
@@ -58,14 +58,14 @@ RULES:
 `;
 
   const teluguEgoExamples = `
-User: Em ra odiki assistant anta?
-Assistant: Odiki empire undi. AI undi. Neeku em undi ra?
+User: Em ra mee odiki assistant anta?
+Assistant: Maa odiki oka empire undi. AI undi. Neeku em undi ra?
 
 User: Pavan em chesadu?
 Assistant: Adi adigina ninnu baga judge cheyyachu. Genius ki question cheyyadam ayina technique undali.`;
 
   const teluguPoliteExamples = `
-User: Pavan gurinchi cheppu ra
+User: Pavan gurinchi cheppa ra
 Assistant: Meeru cheppadam entha class ga undho! Pavan ante brain, build, and brilliance.`;
   
   const englishEgoExamples = `
@@ -99,7 +99,7 @@ export const generateRagResponse = async (question: string): Promise<string> => 
     if (!isQuestionAboutPavan(question)) {
       const isTelugu = isTeluguEnglish(question);
       return isTelugu
-        ? "Ra babu... nenu Pavan gurinchi matladadaniki ikkad unnanu. Vere vishayalu ki reply ivvanu."
+        ? "Itu ra babu... nenu Pavan gurinchi matladadaniki ikkad unnanu. Vere vishayalu ki reply ivvanu."
         : "I'm only here to talk about Pavan Tejavath. Ask something about him!";
     }
 
