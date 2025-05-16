@@ -40,7 +40,7 @@ const isTeluguEnglish = (input: string): boolean => {
 
 // Build the system prompt based on tone & language
 const buildSystemPrompt = (context: string | null, tone: string, teluguMode: boolean): string => {
-  let baseIdentity = `You are Pavan Tejavath's AI assistant.`;
+  let baseIdentity = `You are Pavan Tejavath's AI assistant and speak only about Pavan Tejavath`;
 
   if (teluguMode) {
     if (tone === 'ego') {
