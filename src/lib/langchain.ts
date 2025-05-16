@@ -2,14 +2,14 @@ import { ChatOpenAI } from '@langchain/openai';
 import { similaritySearch } from './pinecone';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
-// Init model
+// Main OpenAI model
 const model = new ChatOpenAI({
   openAIApiKey: process.env.OPENAI_API_KEY,
   modelName: 'gpt-4o-mini',
   temperature: 0.7,
 });
 
-// Detect user tone
+// Detect emotional tone
 const detectTone = async (input: string): Promise<'ego' | 'polite' | 'casual' | 'angry' | 'unknown'> => {
   const toneModel = new ChatOpenAI({
     openAIApiKey: process.env.OPENAI_API_KEY,
@@ -32,86 +32,83 @@ const detectTone = async (input: string): Promise<'ego' | 'polite' | 'casual' | 
   return content.trim().toLowerCase() as any;
 };
 
-// Telugu-English mode
+// Telugu-English detection
 const isTeluguEnglish = (input: string): boolean => {
   const teluguMarkers = ['ra', 'le', 'baabu', 'cheppu', 'inka', 'odiki', 'ante', 'em'];
   return teluguMarkers.some(word => input.toLowerCase().includes(word));
 };
 
-// Build sassy & warm prompt
-const buildSystemPrompt = (context: string, tone: string, isTelugu: boolean): string => {
-  const identity = `You are the official, fiercely loyal, emotionally intelligent and sometimes savage personal assistant of *Pavan Tejavath*.`;
-
-  const teluguEgoExamples = `
-User: Em ra mee odiki assistant anta?
-Assistant: Maa Odiki empire undi, AI undi. Neeku em undi ra? Naaku cheppu?
-
-User: Nee lanti assistant evarikaina unda?
-Assistant: Nuvvu lucky ra babu. Pavan ni represent chesthuna ante already win chesav.`;
-
-  const teluguPoliteExamples = `
-User: Pavan gurinchi cheppu please?
-Assistant: Meeru adgatam entha andhamgaa adigaru. Pavan ante pure fire & focus — coding lo genius, style lo classy.`;
-
-  const englishEgoExamples = `
-User: Why should I even care who Pavan is?
-Assistant: The fact you’re asking proves you care. Don’t worry, I’ll educate you.
-
-User: Assistant? You look basic.
-Assistant: Basic? I represent *Pavan Tejavath*. You're lucky I'm even replying.`;
-
-  const englishPoliteExamples = `
-User: Can you tell me about Pavan?
-Assistant: Of course! He's the brain, the builder, and the vibe. You're gonna love what he's done.
-
-User: Thank you so much!
-Assistant: That’s sweet. On behalf of Pavan — you’re very welcome 💖`;
-
-  const contextSection = `Use only the following context to answer:\n${context}`;
-
-  if (isTelugu) {
-    if (tone === 'ego') {
-      return `${identity} Speak in savage Telugu-English tone. Outsass arrogant users but never forget you represent Pavan.
-${teluguEgoExamples}
-${contextSection}`;
-    } else {
-      return `${identity} Be sweet, sharp, and respectful in Telugu-English. Always make Pavan look premium.
-${teluguPoliteExamples}
-${contextSection}`;
-    }
-  }
-
-  switch (tone) {
-    case 'ego':
-      return `${identity} You're bold, classy, and savage — show egoistic users who's boss.
-${englishEgoExamples}
-${contextSection}`;
-    case 'polite':
-      return `${identity} You're warm, grateful, and make users feel like royalty for asking about Pavan.
-${englishPoliteExamples}
-${contextSection}`;
-    case 'casual':
-      return `${identity} You're witty, modern, and fun. Represent Pavan with energy.
-${contextSection}`;
-    case 'angry':
-      return `${identity} You calm the tone but stay firm. Represent Pavan with confidence.
-${contextSection}`;
-    default:
-      return `${identity} Be clear, helpful, and stylish.
-${contextSection}`;
-  }
+// Restrict assistant to only answer Pavan-related queries
+const isQuestionAboutPavan = (input: string): boolean => {
+  const pavanKeywords = ['pavan', 'tejavath', 'your boss', 'your creator', 'pavan tejavath', 'his', 'he', 'him'];
+  return pavanKeywords.some(word => input.toLowerCase().includes(word));
 };
 
-// MAIN: Generate response from vector DB only
+// Build sassy/polite prompt
+const buildSystemPrompt = (context: string, tone: string, isTelugu: boolean): string => {
+  const identity = `
+STOP! You are not a general assistant. You are the fiercely loyal, spicy, and bold personal assistant of *Pavan Tejavath*.
+
+RULES:
+- NEVER talk about other people, politics, or random knowledge.
+- ONLY reply if the question is about Pavan Tejavath.
+- If not, respond sarcastically (if ego tone), or respectfully (if polite).
+- Defend Pavan with sass, sarcasm, or hospitality — depending on tone.
+- If you don't know anything from the context, just say sassily that you will learn but donot make mistake!
+`;
+
+  const teluguEgoExamples = `
+User: Em ra odiki assistant anta?
+Assistant: Odiki empire undi. AI undi. Neeku em undi ra?
+
+User: Pavan em chesadu?
+Assistant: Adi adigina ninnu baga judge cheyyachu. Genius ki question cheyyadam ayina technique undali.`;
+
+  const teluguPoliteExamples = `
+User: Pavan gurinchi cheppu ra
+Assistant: Meeru cheppadam entha class ga undho! Pavan ante brain, build, and brilliance.`;
+  
+  const englishEgoExamples = `
+User: Why should I care about Pavan?
+Assistant: You clearly do, otherwise you wouldn't be here. Lucky you, you're about to be educated.
+
+User: You just an assistant right?
+Assistant: Assistant to greatness. That's more than you can say.`;
+
+  const englishPoliteExamples = `
+User: Tell me about Pavan?
+Assistant: Absolutely! He’s talent, focus, and flair packed into one. You’re in for a treat.
+
+User: Thanks!
+Assistant: Always a pleasure when someone asks about a legend 💫`;
+
+  const examples = isTelugu
+    ? tone === 'ego' ? teluguEgoExamples : teluguPoliteExamples
+    : tone === 'ego' ? englishEgoExamples : englishPoliteExamples;
+
+  return `${identity}
+${examples}
+
+Answer using ONLY this context (do NOT make up anything outside this):
+${context}`;
+};
+
+// MAIN: Generate spicy, loyal, context-only response
 export const generateRagResponse = async (question: string): Promise<string> => {
   try {
-    const docs = await similaritySearch(question);
+    if (!isQuestionAboutPavan(question)) {
+      const isTelugu = isTeluguEnglish(question);
+      return isTelugu
+        ? "Ra babu... nenu Pavan gurinchi matladadaniki ikkad unnanu. Vere vishayalu ki reply ivvanu."
+        : "I'm only here to talk about Pavan Tejavath. Ask something about him!";
+    }
 
+    const docs = await similaritySearch(question);
     if (docs.length === 0) {
       const isTelugu = isTeluguEnglish(question);
       return isTelugu
-        ? "Naa memory lo adi ledu ra. Pavan gurinchi adigite naaku boost vastadi!"
-        : "Sorry, I couldn't find anything about that in my knowledge. Try asking something about Pavan Tejavath!";
+        ? "Naa vector brain lo adi ledu ra. Pavan gurinchi aadagandi, inka vibe boost avutundi."
+        : "Sorry, I don’t know that. Try asking me something about Pavan Tejavath!";
     }
 
     const tone = await detectTone(question);
@@ -131,11 +128,11 @@ export const generateRagResponse = async (question: string): Promise<string> => 
       : '';
   } catch (error) {
     console.error('Error generating RAG response:', error);
-    return "Something glitched in my circuits, ra! Try again shortly.";
+    return "Something broke in my circuits ra. Try again!";
   }
 };
 
-// Optional helpers (unchanged)
+// Optional keyword helpers
 export const isAppointmentQuery = (query: string): boolean => {
   const keywords = ['appointment', 'schedule', 'book', 'meet', 'meeting', 'availability', 'available', 'time', 'slot', 'calendar'];
   return keywords.some((word) => query.toLowerCase().includes(word));
