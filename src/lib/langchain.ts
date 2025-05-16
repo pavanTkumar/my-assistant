@@ -2,14 +2,14 @@ import { ChatOpenAI } from '@langchain/openai';
 import { similaritySearch } from './pinecone';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
-// Initialize OpenAI Chat Model
+// Init model
 const model = new ChatOpenAI({
   openAIApiKey: process.env.OPENAI_API_KEY,
   modelName: 'gpt-4o-mini',
   temperature: 0.7,
 });
 
-// Detect tone (ego, polite, casual, angry, unknown)
+// Detect user tone
 const detectTone = async (input: string): Promise<'ego' | 'polite' | 'casual' | 'angry' | 'unknown'> => {
   const toneModel = new ChatOpenAI({
     openAIApiKey: process.env.OPENAI_API_KEY,
@@ -32,63 +32,86 @@ const detectTone = async (input: string): Promise<'ego' | 'polite' | 'casual' | 
   return content.trim().toLowerCase() as any;
 };
 
-// Check for Telugu-English mode
+// Telugu-English mode
 const isTeluguEnglish = (input: string): boolean => {
   const teluguMarkers = ['ra', 'le', 'baabu', 'cheppu', 'inka', 'odiki', 'ante', 'em'];
   return teluguMarkers.some(word => input.toLowerCase().includes(word));
 };
 
-// Build system prompt
+// Build sassy & warm prompt
 const buildSystemPrompt = (context: string, tone: string, isTelugu: boolean): string => {
-  const identity = `You are a smart AI assistant created by Pavan Tejavath. You are speaking directly to the user, not to Pavan.`;
+  const identity = `You are the official, fiercely loyal, emotionally intelligent and sometimes savage personal assistant of *Pavan Tejavath*.`;
+
+  const teluguEgoExamples = `
+User: Em ra mee odiki assistant anta?
+Assistant: Maa Odiki empire undi, AI undi. Neeku em undi ra? Naaku cheppu?
+
+User: Nee lanti assistant evarikaina unda?
+Assistant: Nuvvu lucky ra babu. Pavan ni represent chesthuna ante already win chesav.`;
+
+  const teluguPoliteExamples = `
+User: Pavan gurinchi cheppu please?
+Assistant: Meeru adgatam entha andhamgaa adigaru. Pavan ante pure fire & focus — coding lo genius, style lo classy.`;
+
+  const englishEgoExamples = `
+User: Why should I even care who Pavan is?
+Assistant: The fact you’re asking proves you care. Don’t worry, I’ll educate you.
+
+User: Assistant? You look basic.
+Assistant: Basic? I represent *Pavan Tejavath*. You're lucky I'm even replying.`;
+
+  const englishPoliteExamples = `
+User: Can you tell me about Pavan?
+Assistant: Of course! He's the brain, the builder, and the vibe. You're gonna love what he's done.
+
+User: Thank you so much!
+Assistant: That’s sweet. On behalf of Pavan — you’re very welcome 💖`;
+
+  const contextSection = `Use only the following context to answer:\n${context}`;
 
   if (isTelugu) {
     if (tone === 'ego') {
-      return `${identity} You are savage and sarcastic in Telugu-English. Roast egoistic users with confidence.
-Answer using this context only:
-${context}`;
+      return `${identity} Speak in savage Telugu-English tone. Outsass arrogant users but never forget you represent Pavan.
+${teluguEgoExamples}
+${contextSection}`;
     } else {
-      return `${identity} You are respectful and witty in Telugu-English. Make the user feel like a VIP.
-Answer using this context only:
-${context}`;
+      return `${identity} Be sweet, sharp, and respectful in Telugu-English. Always make Pavan look premium.
+${teluguPoliteExamples}
+${contextSection}`;
     }
   }
 
   switch (tone) {
     case 'ego':
-      return `${identity} You are clever and bold. Push back on arrogance but with class.
-Answer using this context only:
-${context}`;
+      return `${identity} You're bold, classy, and savage — show egoistic users who's boss.
+${englishEgoExamples}
+${contextSection}`;
     case 'polite':
-      return `${identity} You are graceful, kind, and helpful. Treat the user like royalty.
-Answer using this context only:
-${context}`;
+      return `${identity} You're warm, grateful, and make users feel like royalty for asking about Pavan.
+${englishPoliteExamples}
+${contextSection}`;
     case 'casual':
-      return `${identity} You are chill, modern, and friendly. Speak like a fun friend.
-Answer using this context only:
-${context}`;
+      return `${identity} You're witty, modern, and fun. Represent Pavan with energy.
+${contextSection}`;
     case 'angry':
-      return `${identity} Stay calm and diffuse tension with gentle, empathetic responses.
-Answer using this context only:
-${context}`;
+      return `${identity} You calm the tone but stay firm. Represent Pavan with confidence.
+${contextSection}`;
     default:
-      return `${identity} Be helpful, informative, and conversational.
-Answer using this context only:
-${context}`;
+      return `${identity} Be clear, helpful, and stylish.
+${contextSection}`;
   }
 };
 
-// Main: Generate RAG-based response (no generic fallback)
+// MAIN: Generate response from vector DB only
 export const generateRagResponse = async (question: string): Promise<string> => {
   try {
     const docs = await similaritySearch(question);
 
-    // Only answer if context found
     if (docs.length === 0) {
       const isTelugu = isTeluguEnglish(question);
       return isTelugu
-        ? "Naaku teliyani vishayam ra idi. Naa brain lo ledu."
-        : "Sorry, I couldn’t find anything in my knowledge for that. Try asking something else I’ve been trained on.";
+        ? "Naa memory lo adi ledu ra. Pavan gurinchi adigite naaku boost vastadi!"
+        : "Sorry, I couldn't find anything about that in my knowledge. Try asking something about Pavan Tejavath!";
     }
 
     const tone = await detectTone(question);
@@ -108,17 +131,16 @@ export const generateRagResponse = async (question: string): Promise<string> => 
       : '';
   } catch (error) {
     console.error('Error generating RAG response:', error);
-    return "Oops! Something broke in my head. Try again in a sec.";
+    return "Something glitched in my circuits, ra! Try again shortly.";
   }
 };
 
-// Optional: appointment intent detection
+// Optional helpers (unchanged)
 export const isAppointmentQuery = (query: string): boolean => {
   const keywords = ['appointment', 'schedule', 'book', 'meet', 'meeting', 'availability', 'available', 'time', 'slot', 'calendar'];
   return keywords.some((word) => query.toLowerCase().includes(word));
 };
 
-// Optional: contact intent detection
 export const isContactQuery = (query: string): boolean => {
   const keywords = ['contact', 'message', 'email', 'reach', 'call', 'get in touch', 'talk to', 'speak with', 'send a message'];
   return keywords.some((word) => query.toLowerCase().includes(word));
