@@ -1,0 +1,372 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum BookingStatus {
+  PENDING      // Initial state after conversation
+  CONFIRMED    // Calendar event created
+  CANCELLED    // User cancelled
+  COMPLETED    // Meeting happened
+  NO_SHOW      // User didn't show up
+}
+
+enum ConversationStage {
+  INTENT_DETECTION
+  AVAILABILITY_CHECK
+  SLOT_PRESENTATION
+  SLOT_SELECTION
+  DETAILS_COLLECTION
+  CONFIRMATION
+  BOOKING_EXECUTION
+  COMPLETED
+  ERROR
+}
+
+enum ConversationIntent {
+  SCHEDULE
+  CHECK_AVAILABILITY
+  RESCHEDULE
+  CANCEL
+  GENERAL
+  WAITLIST
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum WaitlistStatus {
+  ACTIVE
+  NOTIFIED
+  CONVERTED
+  EXPIRED
+}
+
+enum AnalyticsEventType {
+  CONVERSATION_STARTED
+  INTENT_DETECTED
+  AVAILABILITY_CHECKED
+  SLOT_SELECTED
+  BOOKING_CREATED
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  CONVERSATION_DROPPED
+  WAITLIST_JOINED
+}
+
+// ============================================================================
+// USER MANAGEMENT (Privacy-First)
+// ============================================================================
+
+model User {
+  id            String   @id @default(uuid())
+  emailHash     String   @unique // SHA-256 hash of email for identification
+  name          String?  // Optional, can be cleared after booking
+  phone         String?
+  company       String?
+  linkedIn      String?
+  
+  // Statistics
+  totalBookings Int      @default(0)
+  totalCancellations Int @default(0)
+  
+  // Relations
+  bookings      Booking[]
+  waitlistEntries Waitlist[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([emailHash])
+  @@map("users")
+}
+
+// ============================================================================
+// MEETING TYPES (Templates)
+// ============================================================================
+
+model MeetingType {
+  id          String  @id @default(uuid())
+  name        String  @unique // "Quick Call", "Consultation", "Interview"
+  description String?
+  duration    Int     // minutes
+  color       String? // Hex color for UI
+  
+  // Meeting configuration
+  bufferBefore Int   @default(0) // minutes
+  bufferAfter  Int   @default(0) // minutes
+  
+  // Availability rules
+  allowWeekends Boolean @default(false)
+  minAdvanceNotice Int @default(120) // minutes
+  maxAdvanceBooking Int @default(30) // days
+  
+  // Pricing (future use)
+  price       Float?  @default(0)
+  currency    String? @default("USD")
+  
+  isActive    Boolean @default(true)
+  
+  // Relations
+  bookings    Booking[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("meeting_types")
+}
+
+// ============================================================================
+// BOOKINGS
+// ============================================================================
+
+model Booking {
+  id              String        @id @default(uuid())
+  
+  // User reference
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Meeting type
+  meetingTypeId   String?
+  meetingType     MeetingType?  @relation(fields: [meetingTypeId], references: [id])
+  
+  // Contact info (encrypted/minimized)
+  name            String
+  email           String        // Stored temporarily, cleared after 30 days
+  phone           String?
+  company         String?
+  
+  // Booking details
+  purpose         String
+  notes           String?
+  
+  // Scheduling
+  scheduledDate   DateTime      // Date of the meeting
+  startTime       DateTime      // Full datetime with timezone
+  endTime         DateTime
+  duration        Int           // minutes
+  timezone        String        @default("Asia/Kolkata")
+  
+  // Google Calendar integration
+  googleEventId   String?       @unique
+  googleMeetLink  String?
+  
+  // Status management
+  status          BookingStatus @default(PENDING)
+  confirmationCode String       @unique // For user to manage booking
+  
+  // Cancellation
+  cancelledAt     DateTime?
+  cancellationReason String?
+  
+  // Recurring meeting reference
+  recurringPatternId String?
+  recurringPattern   RecurringPattern? @relation(fields: [recurringPatternId], references: [id])
+  isRecurring     Boolean       @default(false)
+  
+  // Analytics
+  conversationId  String?       // Link to conversation that created this
+  createdVia      String?       @default("ai_assistant") // "ai_assistant", "api", "manual"
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([startTime])
+  @@index([googleEventId])
+  @@index([confirmationCode])
+  @@index([recurringPatternId])
+  @@map("bookings")
+}
+
+// ============================================================================
+// RECURRING PATTERNS
+// ============================================================================
+
+model RecurringPattern {
+  id          String              @id @default(uuid())
+  userId      String
+  
+  // Recurrence rules
+  frequency   RecurrenceFrequency
+  interval    Int                 @default(1) // Every X weeks/months
+  
+  // Days of week (for WEEKLY/BIWEEKLY)
+  // Stored as JSON array: [1, 3, 5] for Mon, Wed, Fri
+  daysOfWeek  Json?
+  
+  // Day of month (for MONTHLY)
+  dayOfMonth  Int?
+  
+  // Time configuration
+  startTime   DateTime            // When the pattern starts
+  endTime     DateTime?           // When the pattern ends (optional)
+  duration    Int                 // minutes per occurrence
+  
+  // Meeting details
+  meetingTypeId String?
+  purpose     String
+  
+  // Status
+  isActive    Boolean             @default(true)
+  
+  // Relations
+  bookings    Booking[]
+  
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([userId])
+  @@index([isActive])
+  @@map("recurring_patterns")
+}
+
+// ============================================================================
+// WAITLIST
+// ============================================================================
+
+model Waitlist {
+  id          String         @id @default(uuid())
+  
+  // User info
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Desired slot
+  desiredDate DateTime
+  desiredTime DateTime
+  duration    Int            // minutes
+  
+  // Flexibility
+  flexibleDates Json?        // Array of alternative dates
+  flexibleTimes Json?        // Array of alternative time ranges
+  
+  // Meeting details
+  meetingTypeId String?
+  purpose     String
+  priority    Int            @default(0) // Higher = more urgent
+  
+  // Status
+  status      WaitlistStatus @default(ACTIVE)
+  notifiedAt  DateTime?
+  convertedToBookingId String?  // If slot opened and booked
+  expiresAt   DateTime       // Auto-expire after X days
+  
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([desiredDate])
+  @@index([expiresAt])
+  @@map("waitlist")
+}
+
+// ============================================================================
+// RATE LIMITING (Privacy-First with Hashed Identifiers)
+// ============================================================================
+
+model RateLimit {
+  id            String   @id @default(uuid())
+  
+  // Identifier (hashed email or IP)
+  identifierHash String  // SHA-256 hash
+  identifierType String  // "email" | "ip"
+  
+  // Action tracking
+  actionType    String   // "booking" | "api_call" | "conversation"
+  count         Int      @default(1)
+  
+  // Time window
+  windowStart   DateTime
+  windowEnd     DateTime
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([identifierHash, identifierType, actionType, windowStart])
+  @@index([identifierHash, actionType, windowEnd])
+  @@map("rate_limits")
+}
+
+// ============================================================================
+// ANALYTICS
+// ============================================================================
+
+model AnalyticsEvent {
+  id          String             @id @default(uuid())
+  
+  // Event details
+  eventType   AnalyticsEventType
+  userId      String?
+  sessionId   String?            // Conversation session
+  
+  // Event data
+  metadata    Json?              // Flexible event data
+  
+  // Context
+  ipAddress   String?
+  userAgent   String?
+  referrer    String?
+  
+  // Timing
+  duration    Int?               // milliseconds (for timed events)
+  
+  createdAt   DateTime           @default(now())
+
+  @@index([eventType, createdAt])
+  @@index([sessionId])
+  @@index([userId])
+  @@map("analytics_events")
+}
+
+// ============================================================================
+// AUDIT LOGS
+// ============================================================================
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  
+  // Actor
+  userId      String?
+  actorType   String   @default("system") // "user" | "system" | "admin"
+  
+  // Action
+  action      String   // "booking.created" | "booking.cancelled" | etc
+  entityType  String   // "booking" | "user" | "waitlist"
+  entityId    String
+  
+  // Details
+  changes     Json?    // Before/after for updates
+  metadata    Json?    // Additional context
+  
+  // Context
+  ipAddress   String?
+  userAgent   String?
+  
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

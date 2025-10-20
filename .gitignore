@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# Google Service Account
+google-service-account.json
+google-*.json
+*-service-account.json
+
+# Environment variables
+.env.local
+.env*.local.env

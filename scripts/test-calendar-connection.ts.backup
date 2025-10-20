@@ -1,0 +1,48 @@
+/**
+ * Test Script: Verify Google Calendar Connection
+ * 
+ * Usage: npx ts-node scripts/test-calendar-connection.ts
+ */
+
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+import { testCalendarConnection } from '../src/lib/calendar/service-account';
+
+// Load environment variables
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
+async function testConnection() {
+  console.log('\n🔍 Testing Google Calendar Connection...\n');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+  try {
+    const result = await testCalendarConnection();
+
+    if (result.success) {
+      console.log('✅ SUCCESS!');
+      console.log(`📅 Connected to: ${result.calendarName}`);
+      console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      console.log('🎉 Your Google Calendar integration is working!\n');
+      console.log('Next steps:');
+      console.log('1. Proceed with implementing the availability engine');
+      console.log('2. Test slot generation');
+      console.log('3. Implement booking logic\n');
+    } else {
+      console.log('❌ FAILED!');
+      console.log(`Error: ${result.message}`);
+      console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      console.log('🔧 Troubleshooting:');
+      console.log('1. Verify your .env.local file has correct credentials');
+      console.log('2. Ensure Google Calendar API is enabled in Cloud Console');
+      console.log('3. Check that calendar is shared with service account');
+      console.log('4. Verify service account email in calendar sharing settings\n');
+      process.exit(1);
+    }
+  } catch (error: any) {
+    console.log('❌ ERROR!');
+    console.log(`${error.message}\n`);
+    process.exit(1);
+  }
+}
+
+testConnection();
