@@ -18,7 +18,8 @@
     "test-redis": "node scripts/test-redis-connection.js",
     "test-calendar-client": "node scripts/test-calendar-client.js",
     "test:availability": "node scripts/test-availability-api.js",
-    "test:availability:old": "node scripts/test-availability-engine.js"
+    "test:availability:old": "node scripts/test-availability-engine.js",
+    "test-booking-chat": "node scripts/test-booking-chat.js"
   },
   "dependencies": {
     "@langchain/core": "^1.0.1",

@@ -141,8 +141,8 @@ model Booking {
   id              String        @id @default(uuid())
   
   // User reference
-  userId          String
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String?
+  user            User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   // Meeting type
   meetingTypeId   String?

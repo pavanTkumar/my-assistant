@@ -15,7 +15,7 @@ async function runApiTests() {
   let passedTests = 0;
   let failedTests = 0;
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3002';
 
   console.log(`🌐 Testing against: ${baseUrl}\n`);
   console.log('⚠️  Note: Make sure the dev server is running (npm run dev)\n');
