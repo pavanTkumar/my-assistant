@@ -5,13 +5,29 @@
 
 import { Redis } from '@upstash/redis';
 
-if (!process.env.REDIS_URL || !process.env.REDIS_TOKEN) {
-  throw new Error('Missing Redis configuration: REDIS_URL and REDIS_TOKEN required');
-}
+// Lazy singleton — do NOT validate or instantiate at module level.
+// Next.js imports modules during the build phase when env vars are absent;
+// instantiating here would cause build failures. Throw only at runtime (first use).
+let _redis: Redis | null = null;
 
-export const redis = new Redis({
-  url: process.env.REDIS_URL,
-  token: process.env.REDIS_TOKEN,
+const getRedisInstance = (): Redis => {
+  if (!_redis) {
+    if (!process.env.REDIS_URL || !process.env.REDIS_TOKEN) {
+      throw new Error('Missing Redis configuration: REDIS_URL and REDIS_TOKEN required');
+    }
+    _redis = new Redis({
+      url: process.env.REDIS_URL,
+      token: process.env.REDIS_TOKEN,
+    });
+  }
+  return _redis;
+};
+
+// Proxy preserves the existing `redis.*` call-site API across the codebase
+export const redis: Redis = new Proxy({} as Redis, {
+  get(_target, prop: string | symbol) {
+    return (getRedisInstance() as any)[prop as string];
+  },
 });
 
 // ============================================================================
