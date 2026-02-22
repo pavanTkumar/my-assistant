@@ -13,6 +13,10 @@ export default function Home() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Stateful conversation flows — carried with every request so the API stays stateless
+  const [bookingState, setBookingState] = useState<any>(null);
+  const [contactState, setContactState] = useState<any>(null);
   
   // State for rotating prompts
   const [currentPrompt, setCurrentPrompt] = useState('What can I help with?');
@@ -130,7 +134,7 @@ export default function Home() {
     setIsLoading(true);
     
     try {
-      // Call the chat API
+      // Call the chat API — carry conversation flow states so the API stays stateless
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -138,6 +142,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           messages: [...messages, userMessage],
+          bookingState,
+          contactState,
         }),
       });
       
@@ -152,13 +158,21 @@ export default function Home() {
         role: 'assistant',
         content: data.response,
       };
-      
+
       setMessages(prev => [...prev, assistantMessage]);
-      
+
+      // Sync conversation flow states — null them out when complete
+      if (data.bookingState !== undefined) {
+        setBookingState(data.bookingState?.stage === 'complete' ? null : data.bookingState);
+      }
+      if (data.contactState !== undefined) {
+        setContactState(data.contactState?.stage === 'complete' ? null : data.contactState);
+      }
+
       // Speak the response
       speakText(data.response);
-      
-      // Handle special actions if needed
+
+      // Handle special actions if needed (kept for backward compat with modal buttons)
       if (data.action) {
         if (data.action.type === 'bookAppointment') {
           setAppointmentModalOpen(true);
