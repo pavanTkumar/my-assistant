@@ -237,15 +237,6 @@ async function handleBookingFlow(userMessage: string, state: any): Promise<NextR
 
 // Helper: fetch slots for a date and return formatted response
 async function fetchAndShowSlots(date: string): Promise<NextResponse> {
-  // Verify Google Calendar service account credentials are present before calling the API
-  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
-    console.error('Google Calendar credentials missing: GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY not set');
-    return NextResponse.json({
-      response: "The calendar isn't connected yet. Please contact Pavan directly at pavan@thetejavath.com to book a meeting.",
-      bookingState: null,
-    });
-  }
-
   try {
     const slots = await getAvailableSlots(date);
     if (slots.length === 0) {
