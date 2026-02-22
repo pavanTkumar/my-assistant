@@ -16,15 +16,44 @@ const extractorModel = new ChatOpenAI({
 
 // Extract a date from natural language (returns YYYY-MM-DD or null)
 const extractDate = async (message: string): Promise<string | null> => {
-  const today = new Date().toISOString().split('T')[0];
-  const res = await extractorModel.invoke([
-    new SystemMessage(
-      `Today is ${today}. The user is scheduling a meeting. Extract the specific date they mention and return it in YYYY-MM-DD format. If no specific date is found, return "none".`
-    ),
-    new HumanMessage(message),
-  ]);
-  const content = typeof res.content === 'string' ? res.content.trim() : '';
-  return /^\d{4}-\d{2}-\d{2}$/.test(content) ? content : null;
+  const now = new Date();
+  const msg = message.toLowerCase();
+
+  // Handle relative terms locally — fast, never fails
+  if (/\b(today|now|tonight|this (morning|afternoon|evening))\b/.test(msg)) {
+    return now.toISOString().split('T')[0];
+  }
+  if (/\btomorrow\b/.test(msg)) {
+    const tmr = new Date(now);
+    tmr.setDate(tmr.getDate() + 1);
+    return tmr.toISOString().split('T')[0];
+  }
+  // "day after tomorrow"
+  if (/\bday after tomorrow\b/.test(msg)) {
+    const dat = new Date(now);
+    dat.setDate(dat.getDate() + 2);
+    return dat.toISOString().split('T')[0];
+  }
+  // ISO format already present
+  const isoMatch = message.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  if (isoMatch) return isoMatch[1];
+
+  // Fall back to GPT for "next Monday", "February 25", etc.
+  const today = now.toISOString().split('T')[0];
+  try {
+    const res = await extractorModel.invoke([
+      new SystemMessage(
+        `Today is ${today}. Extract the date from the user's message and return ONLY a date in YYYY-MM-DD format. ` +
+        `"today" = ${today}. For relative days like "next Monday", calculate the actual date. ` +
+        `If no date is mentioned at all, return "none". Do not include any other text.`
+      ),
+      new HumanMessage(message),
+    ]);
+    const content = typeof res.content === 'string' ? res.content.trim() : '';
+    return /^\d{4}-\d{2}-\d{2}$/.test(content) ? content : null;
+  } catch {
+    return null;
+  }
 };
 
 // Extract email address from text
@@ -96,7 +125,7 @@ async function handleBookingFlow(userMessage: string, state: any): Promise<NextR
       return await fetchAndShowSlots(date);
     }
     return NextResponse.json({
-      response: "Sure! What date would you like to meet? You can say something like 'tomorrow', 'next Monday', or a specific date.",
+      response: "Sure! What date would you like to meet? You can say something like 'tomorrow', 'next Monday', or 'March 5'.",
       bookingState: { stage: 'date_asked' },
     });
   }
@@ -208,11 +237,24 @@ async function handleBookingFlow(userMessage: string, state: any): Promise<NextR
 
 // Helper: fetch slots for a date and return formatted response
 async function fetchAndShowSlots(date: string): Promise<NextResponse> {
+  // Verify Google Calendar credentials are present before calling the API
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_REFRESH_TOKEN) {
+    console.error('Google Calendar credentials missing: GOOGLE_CLIENT_ID or GOOGLE_REFRESH_TOKEN not set');
+    return NextResponse.json({
+      response: "The calendar isn't connected yet. Please contact Pavan directly at pavan@thetejavath.com to book a meeting.",
+      bookingState: null,
+    });
+  }
+
   try {
     const slots = await getAvailableSlots(date);
     if (slots.length === 0) {
+      // Today might be fully in the past (after working hours)
+      const isToday = date === new Date().toISOString().split('T')[0];
       return NextResponse.json({
-        response: `No open slots on ${date}. Would you like to try a different date?`,
+        response: isToday
+          ? `All slots for today (${date}) are already taken or past. Would you like to check tomorrow instead?`
+          : `No open slots on ${date}. Would you like to try a different date?`,
         bookingState: { stage: 'date_asked' },
       });
     }
@@ -223,9 +265,16 @@ async function fetchAndShowSlots(date: string): Promise<NextResponse> {
       bookingState: { stage: 'slots_shown', date, slots: available },
     });
   } catch (err: any) {
-    console.error('Error fetching slots:', err);
+    // Log the real error for Vercel logs
+    console.error('Calendar API error for date', date, ':', err?.message || err);
+    const isAuthError = err?.message?.toLowerCase().includes('auth') ||
+      err?.message?.toLowerCase().includes('token') ||
+      err?.message?.toLowerCase().includes('credential') ||
+      err?.code === 401 || err?.code === 403;
     return NextResponse.json({
-      response: "I had trouble checking the calendar. Could you try a different date?",
+      response: isAuthError
+        ? "I can't access the calendar right now. Please reach out to Pavan directly at pavan@thetejavath.com."
+        : `I had trouble checking availability for ${date}. Could you try another date like tomorrow?`,
       bookingState: { stage: 'date_asked' },
     });
   }
