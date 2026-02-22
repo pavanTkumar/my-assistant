@@ -94,6 +94,37 @@ const parseSlotSelection = (message: string, slots: Array<{ time: string }>): { 
   return null;
 };
 
+// Answer a follow-up question using session context (booking or contact)
+const answerFromSession = async (
+  question: string,
+  sessionMemory: { type: string; date?: string; time?: string; name: string; email: string }
+): Promise<string> => {
+  const ctx =
+    sessionMemory.type === 'booking'
+      ? `The user booked a meeting with Pavan Tejavath on ${sessionMemory.date} at ${sessionMemory.time} IST (India Standard Time, UTC+5:30). A confirmation was noted for ${sessionMemory.email}. Pavan will reach out before the meeting.`
+      : `The user sent a message to Pavan Tejavath. The reply will go to ${sessionMemory.email}.`;
+
+  const res = await extractorModel.invoke([
+    new SystemMessage(
+      `You are Pavan Tejavath's assistant. Answer the user's follow-up question based ONLY on this context:\n${ctx}\nBe concise and helpful.`
+    ),
+    new HumanMessage(question),
+  ]);
+  return typeof res.content === 'string' ? res.content.trim() : '';
+};
+
+// Detect if a message is a follow-up about the current session
+const isSessionFollowUp = (msg: string): boolean => {
+  const m = msg.toLowerCase();
+  const triggers = [
+    'that', 'it ', 'this ', 'the meeting', 'my booking', 'i booked', 'i scheduled',
+    'my appointment', 'the booking', 'timezone', 'time zone', 'ist', 'est', 'gmt',
+    'invite', 'calendar invite', 'already booked', 'confirmation', 'what time',
+    'which time', 'the slot', 'what date', 'which date',
+  ];
+  return triggers.some(t => m.includes(t));
+};
+
 // Check if user is cancelling
 const isCancellation = (msg: string): boolean => {
   const m = msg.toLowerCase();
@@ -216,8 +247,9 @@ async function handleBookingFlow(userMessage: string, state: any): Promise<NextR
       }
 
       return NextResponse.json({
-        response: `Booking confirmed!\n\n📅 ${date} at ${selectedSlot.time}\n👤 ${userName}\n📧 ${userEmail}\n\nPavan will reach out to you at ${userEmail} before the meeting. See you then!`,
+        response: `Booking confirmed!\n\n📅 ${date} at ${selectedSlot.time} IST\n👤 ${userName}\n📧 ${userEmail}\n\nPavan will reach out to you at ${userEmail} before the meeting. See you then!`,
         bookingState: null,
+        sessionMemory: { type: 'booking', date, time: selectedSlot.time, name: userName, email: userEmail },
       });
     } catch (err: any) {
       console.error('Booking error:', err);
@@ -256,24 +288,16 @@ async function fetchAndShowSlots(date: string): Promise<NextResponse> {
       bookingState: { stage: 'slots_shown', date, slots: available },
     });
   } catch (err: any) {
-    // Log full error details for Vercel function logs
-    const status = err?.response?.status || err?.code;
-    const errMsg = err?.message || String(err);
-    console.error(`Calendar API error [${status}] for date ${date}:`, errMsg);
-
-    const isAuthError =
-      status === 401 || status === 403 ||
-      errMsg.toLowerCase().includes('auth') ||
-      errMsg.toLowerCase().includes('token') ||
-      errMsg.toLowerCase().includes('credential') ||
-      errMsg.toLowerCase().includes('permission') ||
-      errMsg.toLowerCase().includes('forbidden') ||
-      errMsg.toLowerCase().includes('unauthorized');
-
+    // Log the real error for Vercel logs
+    console.error('Calendar API error for date', date, ':', err?.message || err);
+    const isAuthError = err?.message?.toLowerCase().includes('auth') ||
+      err?.message?.toLowerCase().includes('token') ||
+      err?.message?.toLowerCase().includes('credential') ||
+      err?.code === 401 || err?.code === 403;
     return NextResponse.json({
       response: isAuthError
-        ? `I can't access the calendar right now (error ${status}). Please reach out to Pavan directly at pavan@thetejavath.com.`
-        : `I had trouble checking availability for ${date} (error: ${errMsg.slice(0, 80)}). Please try again or contact Pavan at pavan@thetejavath.com.`,
+        ? "I can't access the calendar right now. Please reach out to Pavan directly at pavan@thetejavath.com."
+        : `I had trouble checking availability for ${date}. Could you try another date like tomorrow?`,
       bookingState: { stage: 'date_asked' },
     });
   }
@@ -359,6 +383,7 @@ async function handleContactFlow(userMessage: string, state: any): Promise<NextR
       return NextResponse.json({
         response: `Your message has been sent to Pavan!\n\nHe'll get back to you at ${userEmail} within 24-48 hours.`,
         contactState: null,
+        sessionMemory: { type: 'contact', name: userName, email: userEmail },
       });
     } catch (err: any) {
       console.error('WhatsApp send error:', err);
@@ -380,7 +405,7 @@ async function handleContactFlow(userMessage: string, state: any): Promise<NextR
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { messages = [], bookingState, contactState } = body;
+    const { messages = [], bookingState, contactState, sessionMemory } = body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: 'Messages array is required' }, { status: 400 });
@@ -399,9 +424,15 @@ export async function POST(request: NextRequest) {
       return handleContactFlow(userMessage, contactState || null);
     }
 
+    // --- SESSION FOLLOW-UP (user asking about their booking/message) ---
+    if (sessionMemory && isSessionFollowUp(userMessage)) {
+      const response = await answerFromSession(userMessage, sessionMemory);
+      if (response) return NextResponse.json({ response, sessionMemory });
+    }
+
     // --- GENERAL RAG ---
     const response = await generateRagResponse(userMessage);
-    return NextResponse.json({ response });
+    return NextResponse.json({ response, sessionMemory: sessionMemory || null });
   } catch (error: any) {
     console.error('Error in chat API:', error);
     return NextResponse.json(

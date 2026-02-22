@@ -25,6 +25,8 @@ export default function Home() {
   // Conversational flow state (sent to API each turn)
   const [bookingState, setBookingState] = useState<any>(null);
   const [contactState, setContactState] = useState<any>(null);
+  // Session memory — persists for the browser session so follow-up questions work
+  const [sessionMemory, setSessionMemory] = useState<any>(null);
   
   // State for toast notifications
   const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
@@ -144,6 +146,7 @@ export default function Home() {
           messages: [...messages, userMessage],
           bookingState,
           contactState,
+          sessionMemory,
         }),
       });
       
@@ -167,6 +170,10 @@ export default function Home() {
       }
       if ('contactState' in data) {
         setContactState(data.contactState || null);
+      }
+      // Persist session memory when booking/contact completes (or keep existing)
+      if (data.sessionMemory) {
+        setSessionMemory(data.sessionMemory);
       }
 
       // Speak the response
