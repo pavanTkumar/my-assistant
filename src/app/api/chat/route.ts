@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { generateRagResponse, isContactQuery, isAppointmentQuery } from '@/lib/langchain';
 import { getAvailableSlots, bookAppointment } from '@/lib/googleCalendar';
-import { sendWhatsAppMessage, formatWhatsAppMessage, isValidPhoneNumber } from '@/lib/twilio';
+import { sendTelegramMessage, formatBookingNotification, formatContactNotification } from '@/lib/telegram';
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
@@ -307,14 +307,10 @@ async function handleBookingFlow(
     try {
       await bookAppointment(userName, userEmail, date, selectedSlot.time, 30, 'Meeting with Pavan Tejavath');
 
-      // Non-blocking WhatsApp notification
-      const ownerPhone = process.env.OWNER_PHONE_NUMBER;
-      if (ownerPhone && isValidPhoneNumber(ownerPhone)) {
-        sendWhatsAppMessage(
-          ownerPhone,
-          formatWhatsAppMessage(userName, userEmail, `New booking: ${date} at ${selectedSlot.time} IST`, false)
-        ).catch(err => console.error('WhatsApp notification failed:', err?.message));
-      }
+      // Non-blocking Telegram notification
+      sendTelegramMessage(
+        formatBookingNotification(userName, userEmail, date, selectedSlot.time)
+      ).catch((err: any) => console.error('Telegram notification failed:', err?.message));
 
       return NextResponse.json({
         response: `Booking confirmed! 🎉\n\n📅 ${date} at ${selectedSlot.time} IST\n👤 ${userName}\n📧 ${userEmail}\n\nPavan will reach out to you at ${userEmail} before the meeting. See you then!`,
@@ -469,13 +465,8 @@ async function handleContactFlow(
 
     const { userName, userEmail, msgContent } = state;
     try {
-      const ownerPhone = process.env.OWNER_PHONE_NUMBER;
-      if (!ownerPhone || !isValidPhoneNumber(ownerPhone)) {
-        throw new Error('Owner phone not configured');
-      }
-      await sendWhatsAppMessage(
-        ownerPhone,
-        formatWhatsAppMessage(userName, userEmail, msgContent, false)
+      await sendTelegramMessage(
+        formatContactNotification(userName, userEmail, msgContent)
       );
       return NextResponse.json({
         response: `Your message has been sent to Pavan! 📨\n\nHe'll get back to you at ${userEmail} within 24–48 hours.`,
@@ -483,8 +474,7 @@ async function handleContactFlow(
         sessionMemory: { type: 'contact', name: userName, email: userEmail },
       });
     } catch (err: any) {
-      console.error('WhatsApp send error:', err?.message);
-      // Twilio auth failures shouldn't expose raw errors — guide the user instead
+      console.error('Telegram send error:', err?.message);
       return NextResponse.json({
         response: `I wasn't able to deliver the message right now. You can reach Pavan directly at pavan@thetejavath.com — sorry for the trouble!`,
         contactState: null,
