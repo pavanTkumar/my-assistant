@@ -256,16 +256,24 @@ async function fetchAndShowSlots(date: string): Promise<NextResponse> {
       bookingState: { stage: 'slots_shown', date, slots: available },
     });
   } catch (err: any) {
-    // Log the real error for Vercel logs
-    console.error('Calendar API error for date', date, ':', err?.message || err);
-    const isAuthError = err?.message?.toLowerCase().includes('auth') ||
-      err?.message?.toLowerCase().includes('token') ||
-      err?.message?.toLowerCase().includes('credential') ||
-      err?.code === 401 || err?.code === 403;
+    // Log full error details for Vercel function logs
+    const status = err?.response?.status || err?.code;
+    const errMsg = err?.message || String(err);
+    console.error(`Calendar API error [${status}] for date ${date}:`, errMsg);
+
+    const isAuthError =
+      status === 401 || status === 403 ||
+      errMsg.toLowerCase().includes('auth') ||
+      errMsg.toLowerCase().includes('token') ||
+      errMsg.toLowerCase().includes('credential') ||
+      errMsg.toLowerCase().includes('permission') ||
+      errMsg.toLowerCase().includes('forbidden') ||
+      errMsg.toLowerCase().includes('unauthorized');
+
     return NextResponse.json({
       response: isAuthError
-        ? "I can't access the calendar right now. Please reach out to Pavan directly at pavan@thetejavath.com."
-        : `I had trouble checking availability for ${date}. Could you try another date like tomorrow?`,
+        ? `I can't access the calendar right now (error ${status}). Please reach out to Pavan directly at pavan@thetejavath.com.`
+        : `I had trouble checking availability for ${date} (error: ${errMsg.slice(0, 80)}). Please try again or contact Pavan at pavan@thetejavath.com.`,
       bookingState: { stage: 'date_asked' },
     });
   }
