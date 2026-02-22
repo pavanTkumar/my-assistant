@@ -139,10 +139,8 @@ class CalendarServiceAccount {
   }
 }
 
-// Export singleton instance
-export const calendarServiceAccount = CalendarServiceAccount.getInstance();
-
-// Export getters for convenience
-export const getCalendarClient = () => calendarServiceAccount.getCalendarClient();
-export const getCalendarId = () => calendarServiceAccount.getCalendarId();
-export const testCalendarConnection = () => calendarServiceAccount.testConnection();
+// Lazy singleton — do NOT instantiate at module level to avoid build-time failures
+// when Google Calendar env vars are missing. Callers must use getInstance() directly.
+export const getCalendarClient = () => CalendarServiceAccount.getInstance().getCalendarClient();
+export const getCalendarId = () => CalendarServiceAccount.getInstance().getCalendarId();
+export const testCalendarConnection = () => CalendarServiceAccount.getInstance().testConnection();
