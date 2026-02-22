@@ -1,5 +1,5 @@
 import { Pinecone, Index } from '@pinecone-database/pinecone';
-import { Document } from 'langchain/document';
+import { Document } from '@langchain/core/documents';
 import { OpenAIEmbeddings } from '@langchain/openai';
 import fs from 'fs';
 
