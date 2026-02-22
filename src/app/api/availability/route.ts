@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET /api/availability
  * Main availability endpoint - returns available slots for date range

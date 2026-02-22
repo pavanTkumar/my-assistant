@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * DELETE /api/availability/reserve/[slotId]
  * Release a slot reservation

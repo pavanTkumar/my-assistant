@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * POST /api/chat
  * Unified chat endpoint — routes to booking, contact, or general RAG

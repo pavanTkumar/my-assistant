@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * POST /api/chat/booking
  * Conversational booking endpoint - Production Ready

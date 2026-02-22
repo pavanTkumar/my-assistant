@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * POST /api/availability/reserve
  * Reserve a slot temporarily (5 minutes)
