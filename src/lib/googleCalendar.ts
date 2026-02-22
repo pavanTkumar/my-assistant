@@ -1,85 +1,74 @@
 import { google } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
+import { JWT } from 'google-auth-library';
 
-// Initialize OAuth2 client
-export const getOAuth2Client = (): OAuth2Client => {
-  const oauth2Client = new OAuth2Client(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-  );
-
-  oauth2Client.setCredentials({
-    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+// Service account auth — no refresh tokens, never expires
+const getAuth = (): JWT => {
+  return new JWT({
+    email: process.env.GOOGLE_CLIENT_EMAIL,
+    key: (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    scopes: ['https://www.googleapis.com/auth/calendar'],
   });
-
-  return oauth2Client;
 };
 
-// Get Google Calendar client
-export const getCalendarClient = () => {
-  const auth = getOAuth2Client();
-  return google.calendar({ version: 'v3', auth });
+const getCalendarClient = () => {
+  return google.calendar({ version: 'v3', auth: getAuth() });
 };
+
+const calendarId = (): string =>
+  process.env.GOOGLE_CALENDAR_ID || process.env.CALENDAR_ID || 'primary';
 
 // Check available slots for a given date
 export async function getAvailableSlots(date: string) {
   try {
     const calendar = getCalendarClient();
     const targetDate = new Date(date);
-    
-    // Set start and end of the day
+
+    // Set start and end of the day in IST
     const startOfDay = new Date(targetDate);
     startOfDay.setHours(0, 0, 0, 0);
-    
+
     const endOfDay = new Date(targetDate);
     endOfDay.setHours(23, 59, 59, 999);
-    
+
     // Get busy periods from Google Calendar
     const freeBusyResponse = await calendar.freebusy.query({
       requestBody: {
         timeMin: startOfDay.toISOString(),
         timeMax: endOfDay.toISOString(),
-        timeZone: 'Asia/Kolkata', // Adjust this to your timezone
-        items: [{ id: process.env.CALENDAR_ID || 'primary' }],
+        timeZone: 'Asia/Kolkata',
+        items: [{ id: calendarId() }],
       },
     });
-    
-    const busySlots = freeBusyResponse.data.calendars?.[process.env.CALENDAR_ID || 'primary']?.busy || [];
-    
-    // Define working hours (9 AM to 5 PM)
-    const workHourStart = 9;
-    const workHourEnd = 17;
-    
-    // Generate 30-minute slots
+
+    const busySlots =
+      freeBusyResponse.data.calendars?.[calendarId()]?.busy || [];
+
+    // Generate 30-minute slots within working hours (9 AM – 6 PM IST)
     const availableSlots = [];
-    
-    for (let hour = workHourStart; hour < workHourEnd; hour++) {
+    const now = new Date();
+
+    for (let hour = 9; hour < 18; hour++) {
       for (let minute = 0; minute < 60; minute += 30) {
         const slotStart = new Date(targetDate);
         slotStart.setHours(hour, minute, 0, 0);
-        
+
         const slotEnd = new Date(slotStart);
         slotEnd.setMinutes(slotEnd.getMinutes() + 30);
-        
-        // Skip if slot is in the past
-        const now = new Date();
-        if (slotStart <= now) {
-          continue;
-        }
-        
-        // Check if slot overlaps with any busy period
+
+        // Skip past slots
+        if (slotStart <= now) continue;
+
+        // Check overlap with busy periods
         const isSlotBusy = busySlots.some(busy => {
           const busyStart = new Date(busy.start || '');
           const busyEnd = new Date(busy.end || '');
-          
           return (
             (slotStart >= busyStart && slotStart < busyEnd) ||
             (slotEnd > busyStart && slotEnd <= busyEnd) ||
             (slotStart <= busyStart && slotEnd >= busyEnd)
           );
         });
-        
+
         if (!isSlotBusy) {
           availableSlots.push({
             start: slotStart.toISOString(),
@@ -89,7 +78,7 @@ export async function getAvailableSlots(date: string) {
         }
       }
     }
-    
+
     return availableSlots;
   } catch (error) {
     console.error('Error fetching available slots:', error);
@@ -108,42 +97,38 @@ export async function bookAppointment(
 ) {
   try {
     const calendar = getCalendarClient();
-    
-    // Parse date and time strings
+
     const [year, month, day] = date.split('-').map(Number);
     const [hour, minute] = time.split(':').map(Number);
-    
+
     const startDateTime = new Date(year, month - 1, day, hour, minute);
     const endDateTime = new Date(startDateTime.getTime() + duration * 60 * 1000);
-    
-    // Create the calendar event
+
     const event = {
       summary: `Meeting with ${name}`,
-      description: purpose,
+      description: `${purpose}\n\nGuest: ${name}\nEmail: ${email}`,
       start: {
         dateTime: startDateTime.toISOString(),
-        timeZone: 'Asia/Kolkata', // Adjust this to your timezone
+        timeZone: 'Asia/Kolkata',
       },
       end: {
         dateTime: endDateTime.toISOString(),
-        timeZone: 'Asia/Kolkata', // Adjust this to your timezone
+        timeZone: 'Asia/Kolkata',
       },
-      attendees: [{ email }],
       reminders: {
         useDefault: false,
         overrides: [
-          { method: 'email', minutes: 24 * 60 },
-          { method: 'popup', minutes: 10 },
+          { method: 'popup' as const, minutes: 10 },
         ],
       },
     };
-    
+
     const response = await calendar.events.insert({
-      calendarId: process.env.CALENDAR_ID || 'primary',
+      calendarId: calendarId(),
       requestBody: event,
-      sendUpdates: 'all', // Send updates to all attendees
+      sendUpdates: 'none',
     });
-    
+
     return {
       success: true,
       eventId: response.data.id,
