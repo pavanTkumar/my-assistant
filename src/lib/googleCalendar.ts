@@ -98,21 +98,26 @@ export async function bookAppointment(
   try {
     const calendar = getCalendarClient();
 
-    const [year, month, day] = date.split('-').map(Number);
     const [hour, minute] = time.split(':').map(Number);
+    const pad = (n: number) => String(n).padStart(2, '0');
 
-    const startDateTime = new Date(year, month - 1, day, hour, minute);
-    const endDateTime = new Date(startDateTime.getTime() + duration * 60 * 1000);
+    // Build ISO strings with explicit IST offset (+05:30) so the event
+    // lands at the correct local time regardless of the server's timezone (UTC on Vercel)
+    const totalEndMinutes = hour * 60 + minute + duration;
+    const endHour = Math.floor(totalEndMinutes / 60) % 24;
+    const endMinute = totalEndMinutes % 60;
+    const startIST = `${date}T${pad(hour)}:${pad(minute)}:00+05:30`;
+    const endIST = `${date}T${pad(endHour)}:${pad(endMinute)}:00+05:30`;
 
     const event = {
       summary: `Meeting with ${name}`,
       description: `${purpose}\n\nGuest: ${name}\nEmail: ${email}`,
       start: {
-        dateTime: startDateTime.toISOString(),
+        dateTime: startIST,
         timeZone: 'Asia/Kolkata',
       },
       end: {
-        dateTime: endDateTime.toISOString(),
+        dateTime: endIST,
         timeZone: 'Asia/Kolkata',
       },
       reminders: {
