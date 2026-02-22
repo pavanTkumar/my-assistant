@@ -18,9 +18,13 @@ export default function Home() {
   const [currentPrompt, setCurrentPrompt] = useState('What can I help with?');
   const [greeting, setGreeting] = useState('');
   
-  // State for modals
+  // State for modals (kept for backward compatibility, no longer auto-opened by chat)
   const [appointmentModalOpen, setAppointmentModalOpen] = useState(false);
   const [messageModalOpen, setMessageModalOpen] = useState(false);
+
+  // Conversational flow state (sent to API each turn)
+  const [bookingState, setBookingState] = useState<any>(null);
+  const [contactState, setContactState] = useState<any>(null);
   
   // State for toast notifications
   const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
@@ -138,6 +142,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           messages: [...messages, userMessage],
+          bookingState,
+          contactState,
         }),
       });
       
@@ -154,18 +160,17 @@ export default function Home() {
       };
       
       setMessages(prev => [...prev, assistantMessage]);
-      
+
+      // Sync conversational flow states back from API response
+      if ('bookingState' in data) {
+        setBookingState(data.bookingState || null);
+      }
+      if ('contactState' in data) {
+        setContactState(data.contactState || null);
+      }
+
       // Speak the response
       speakText(data.response);
-      
-      // Handle special actions if needed
-      if (data.action) {
-        if (data.action.type === 'bookAppointment') {
-          setAppointmentModalOpen(true);
-        } else if (data.action.type === 'sendMessage') {
-          setMessageModalOpen(true);
-        }
-      }
     } catch (error) {
       console.error('Error sending message:', error);
       showToast('Failed to get a response. Please try again.', 'error');
@@ -203,9 +208,15 @@ export default function Home() {
               </h1>
               
               <div className={styles.buttonGrid}>
-                <button 
+                <button
                   className={styles.actionButton}
-                  onClick={() => setAppointmentModalOpen(true)}
+                  onClick={() => {
+                    setInput("I'd like to schedule a meeting with Pavan");
+                    setTimeout(() => {
+                      const event = { preventDefault: () => {} } as React.FormEvent;
+                      handleSubmit(event);
+                    }, 100);
+                  }}
                 >
                   <div className={styles.buttonContent}>
                     <div className={styles.buttonIcon}>
@@ -229,9 +240,15 @@ export default function Home() {
                   </div>
                 </button>
                 
-                <button 
+                <button
                   className={styles.actionButton}
-                  onClick={() => setMessageModalOpen(true)}
+                  onClick={() => {
+                    setInput("I'd like to send a message to Pavan");
+                    setTimeout(() => {
+                      const event = { preventDefault: () => {} } as React.FormEvent;
+                      handleSubmit(event);
+                    }, 100);
+                  }}
                 >
                   <div className={styles.buttonContent}>
                     <div className={styles.buttonIcon}>
