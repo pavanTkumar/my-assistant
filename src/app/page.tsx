@@ -172,6 +172,13 @@ export default function Home() {
               setToolStatus({ tool: event.tool, icon: event.icon, label: event.label });
             } else if (event.type === 'status_clear') {
               setToolStatus(null);
+            } else if (event.type === 'reset_text') {
+              fullText = '';
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: 'assistant', content: '' };
+                return updated;
+              });
             } else if (event.type === 'token') {
               fullText += event.content;
               setStreamStarted(true);
@@ -232,12 +239,13 @@ export default function Home() {
     <div className={styles.container}>
       <header className={styles.header}>
         <div className={styles.headerContent}>
-          Tejavath's Assistant
+          <span className={styles.headerDot} />
+          Pavan's Assistant
         </div>
       </header>
       
       <main className={styles.main}>
-        <div className={styles.center}>
+        <div className={messages.length === 0 ? styles.center : styles.chatWrapper}>
           {messages.length === 0 ? (
             <>
               <h1 className={styles.title}>
@@ -369,26 +377,17 @@ export default function Home() {
               )}
 
               {messages.map((message, index) => {
-                const isLastAssistant = index === messages.length - 1 && message.role === 'assistant';
+                const isUser = message.role === 'user';
+                const isLastAssistant = index === messages.length - 1 && !isUser;
                 const isStreaming = isLastAssistant && isLoading && streamStarted;
+                if (!message.content && !isLastAssistant) return null;
                 return (
-                  <div
-                    key={index}
-                    className={`${styles.message} ${message.role === 'user' ? styles.userMessage : styles.assistantMessage}`}
-                  >
-                    <div className={styles.messageContent}>
-                      <div className={styles.avatar}>
-                        {message.role === 'user' ? (
-                          <div className={styles.userAvatar}>You</div>
-                        ) : (
-                          <div className={styles.assistantAvatar}>AI</div>
-                        )}
-                      </div>
-                      <div className={`${styles.text} ${isStreaming ? styles.streamingText : ''}`}>
-                        {message.role === 'assistant'
-                          ? <ReactMarkdown>{message.content}</ReactMarkdown>
-                          : message.content}
-                      </div>
+                  <div key={index} className={`${styles.messageRow} ${isUser ? styles.userRow : styles.assistantRow}`}>
+                    {!isUser && <div className={styles.aiAvatar}>P</div>}
+                    <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.aiBubble} ${isStreaming ? styles.streamingText : ''}`}>
+                      {isUser
+                        ? message.content
+                        : <ReactMarkdown>{message.content}</ReactMarkdown>}
                     </div>
                   </div>
                 );
@@ -431,6 +430,7 @@ export default function Home() {
 
               {isLoading && (toolStatus !== null || !streamStarted) && (
                 <div className={styles.statusRow}>
+                  <div className={styles.aiAvatar}>P</div>
                   {toolStatus ? (
                     <div className={styles.toolStatus}>
                       <span className={styles.toolStatusIcon}>{toolStatus.icon}</span>

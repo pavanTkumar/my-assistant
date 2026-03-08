@@ -1,38 +1,55 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* ── Base layout ── */
 .container {
   display: flex;
   flex-direction: column;
   height: 100vh;
   color: white;
-  background-color: #0f0f0f;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0a0a0a;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 .header {
-  height: 40px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  height: 52px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 20px;
+  background: rgba(10,10,10,0.95);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .headerContent {
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.headerDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10a37f;
+  box-shadow: 0 0 6px #10a37f;
 }
 
 .main {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 20px;
   overflow-y: auto;
   position: relative;
 }
 
+/* ── Welcome screen ── */
 .center {
   display: flex;
   flex-direction: column;
@@ -41,412 +58,189 @@
   flex: 1;
   gap: 32px;
   width: 100%;
-  max-width: 1000px;
+  max-width: 720px;
   margin: 0 auto;
+  padding: 24px 20px;
 }
 
 .title {
-  font-size: 32px;
-  font-weight: 500;
-  margin-bottom: 16px;
+  font-size: 28px;
+  font-weight: 600;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  letter-spacing: -0.02em;
+  gap: 8px;
+  letter-spacing: -0.03em;
+}
+
+.title span:first-child {
+  color: rgba(255,255,255,0.5);
+  font-size: 16px;
+  font-weight: 400;
 }
 
 .rotatingPrompt {
-  transition: opacity 0.5s, transform 0.5s;
+  transition: opacity 0.4s, transform 0.4s;
   opacity: 1;
   transform: translateY(0);
 }
 
 .fadeOut {
   opacity: 0;
-  transform: translateY(-10px);
+  transform: translateY(-8px);
 }
 
 .fadeIn {
-  animation: fadeIn 0.5s forwards;
+  animation: fadeIn 0.4s forwards;
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Quick action buttons ── */
 .buttonGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  max-width: 650px;
+  gap: 12px;
   width: 100%;
 }
 
 .actionButton {
-  padding: 16px;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
   color: white;
   text-align: left;
   cursor: pointer;
-  transition: all 0.25s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
 }
 
 .actionButton:hover {
-  background-color: rgba(255, 255, 255, 0.08);
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15), 0 0 15px rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.15);
+  transform: translateY(-2px);
 }
 
-.actionButton:active {
-  transform: translateY(0);
-}
+.actionButton:active { transform: translateY(0); }
 
 .buttonContent {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 12px;
 }
 
 .buttonIcon {
-  font-size: 20px;
-  margin-top: 2px;
-  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 6px;
+  flex-shrink: 0;
 }
 
 .buttonTitle {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
   letter-spacing: -0.01em;
 }
 
 .buttonDesc {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
   line-height: 1.3;
 }
 
+/* ── Chat container ── */
 .chatContainer {
   display: flex;
   flex-direction: column;
   width: 100%;
-  flex: 1;
-  overflow-y: auto;
-  gap: 16px;
-  padding: 12px 0;
-}
-
-.message {
-  padding: 12px 0;
-  width: 100%;
-}
-
-.assistantMessage {
-  background-color: rgba(255, 255, 255, 0.03);
-}
-
-.messageContent {
-  display: flex;
+  max-width: 720px;
   margin: 0 auto;
-  max-width: 800px;
-  gap: 16px;
-  padding: 0 16px;
-}
-
-.avatar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 30px;
-  flex-shrink: 0;
-}
-
-.userAvatar, .assistantAvatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.userAvatar {
-  background-color: #5e5e5e;
-}
-
-.assistantAvatar {
-  background-color: #10a37f;
-}
-
-.text {
-  font-size: 15px;
-  line-height: 1.5;
-  white-space: pre-wrap;
   flex: 1;
+  padding: 20px 16px 8px;
+  gap: 6px;
+  position: relative;
 }
 
-/* ── Status row (tool status + thinking pill) ── */
-.statusRow {
+/* ── Message bubbles ── */
+.messageRow {
   display: flex;
-  padding: 2px 16px 2px 62px; /* aligns with message text (30px avatar + 16px gap + 16px padding) */
-  max-width: 800px;
-  margin: 0 auto;
+  align-items: flex-end;
+  gap: 8px;
   width: 100%;
+  animation: msgAppear 0.2s ease;
 }
 
-.toolStatus {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 500;
-  background: linear-gradient(135deg, rgba(16, 163, 127, 0.15), rgba(30, 136, 229, 0.12));
-  border: 1px solid rgba(16, 163, 127, 0.3);
-  color: rgba(255, 255, 255, 0.9);
-  animation: pillAppear 0.25s ease;
-}
-
-.thinkingPill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 500;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.65);
-  animation: pillAppear 0.25s ease;
-}
-
-.toolStatusIcon {
-  font-size: 14px;
-  line-height: 1;
-}
-
-.toolStatusLabel,
-.thinkingLabel {
-  letter-spacing: -0.01em;
-}
-
-.statusDots {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: 2px;
-}
-
-.statusDots span {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: statusDotBounce 1.2s infinite ease-in-out;
-  opacity: 0.6;
-}
-
-.statusDots span:nth-child(2) { animation-delay: 0.2s; }
-.statusDots span:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes statusDotBounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-  30% { transform: translateY(-4px); opacity: 1; }
-}
-
-@keyframes pillAppear {
+@keyframes msgAppear {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Markdown rendering inside assistant messages ── */
-.text :global(p) { margin: 0 0 0.5em; }
-.text :global(p:last-child) { margin-bottom: 0; }
-.text :global(strong) { font-weight: 600; color: rgba(255,255,255,0.95); }
-.text :global(em) { font-style: italic; color: rgba(255,255,255,0.85); }
-.text :global(ul), .text :global(ol) { margin: 0.4em 0 0.6em 1.2em; padding: 0; }
-.text :global(li) { margin-bottom: 0.25em; }
-.text :global(code) {
-  font-family: 'Menlo', monospace;
-  font-size: 13px;
-  background: rgba(255,255,255,0.08);
-  padding: 1px 5px;
-  border-radius: 4px;
-}
-.text :global(pre) {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 8px;
-  padding: 12px;
-  overflow-x: auto;
-  margin: 0.5em 0;
-}
-.text :global(blockquote) {
-  border-left: 3px solid rgba(16,163,127,0.5);
-  margin: 0.4em 0;
-  padding-left: 12px;
-  color: rgba(255,255,255,0.7);
+.userRow {
+  flex-direction: row-reverse;
 }
 
-/* ── Slot cards ── */
-.slotCardsSection {
-  padding: 4px 16px 8px 62px;
-  max-width: 800px;
-  margin: 0 auto;
-  width: 100%;
-  animation: pillAppear 0.3s ease;
+.assistantRow {
+  flex-direction: row;
 }
 
-.slotCardsLabel {
-  font-size: 12px;
-  color: rgba(255,255,255,0.45);
-  margin-bottom: 10px;
-  letter-spacing: -0.01em;
-}
-
-.slotCardsRow {
+.aiAvatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10a37f 0%, #1e88e5 100%);
+  flex-shrink: 0;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.slotCard {
-  padding: 8px 16px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 12px;
-  color: white;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  letter-spacing: -0.01em;
-}
-
-.slotCard:hover {
-  background: rgba(16,163,127,0.15);
-  border-color: rgba(16,163,127,0.4);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(16,163,127,0.15);
-}
-
-.slotCard:active {
-  transform: translateY(0);
-}
-
-.slotCardIST {
-  font-size: 11px;
-  color: rgba(255,255,255,0.45);
-  margin-left: 2px;
-}
-
-/* ── Booking confirmation card ── */
-.bookingCard {
-  margin: 8px 16px 8px 62px;
-  max-width: 340px;
-  background: linear-gradient(135deg, rgba(16,163,127,0.12), rgba(30,136,229,0.08));
-  border: 1px solid rgba(16,163,127,0.35);
-  border-radius: 16px;
-  padding: 16px 20px;
-  animation: pillAppear 0.35s ease;
-}
-
-.bookingCardHeader {
-  font-size: 15px;
-  font-weight: 600;
-  color: #10a37f;
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.bookingCardCheck {
-  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #10a37f;
-  color: white;
   font-size: 11px;
   font-weight: 700;
+  color: white;
+  margin-bottom: 2px;
 }
 
-.bookingCardRow {
+.bubble {
+  padding: 10px 14px;
+  font-size: 15px;
+  line-height: 1.55;
+  max-width: 72%;
+  word-break: break-word;
+}
+
+.userBubble {
+  background: #2563eb;
+  color: white;
+  border-radius: 18px 18px 4px 18px;
+}
+
+.aiBubble {
+  background: #1c1c1e;
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.92);
+  border-radius: 4px 18px 18px 18px;
+}
+
+/* Markdown inside AI bubble */
+.aiBubble :global(p) { margin: 0 0 0.45em; }
+.aiBubble :global(p:last-child) { margin-bottom: 0; }
+.aiBubble :global(strong) { font-weight: 600; color: white; }
+.aiBubble :global(em) { font-style: italic; color: rgba(255,255,255,0.8); }
+.aiBubble :global(ul), .aiBubble :global(ol) { margin: 0.3em 0 0.5em 1.1em; padding: 0; }
+.aiBubble :global(li) { margin-bottom: 0.2em; }
+.aiBubble :global(code) {
+  font-family: 'Menlo', monospace;
   font-size: 13px;
-  color: rgba(255,255,255,0.8);
-  margin-bottom: 6px;
-  letter-spacing: -0.01em;
-}
-
-.bookingCardLink {
-  display: inline-block;
-  margin-top: 10px;
-  font-size: 12px;
-  color: #10a37f;
-  text-decoration: none;
-  letter-spacing: -0.01em;
-  transition: opacity 0.15s;
-}
-
-.bookingCardLink:hover { opacity: 0.8; }
-
-/* ── Confetti ── */
-.confettiOverlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 10;
-}
-
-.confettiPiece {
-  position: absolute;
-  top: -10px;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  animation: confettiFall 3.5s ease-in forwards;
-  left: calc(var(--i) * 5.5% + 2%);
-  animation-delay: calc(var(--i) * 0.12s);
-  background: hsl(calc(var(--i) * 22deg), 80%, 60%);
-}
-
-@keyframes confettiFall {
-  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
-  80%  { opacity: 1; }
-  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+  background: rgba(255,255,255,0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
 }
 
 /* ── Streaming cursor ── */
@@ -463,129 +257,289 @@
   50%       { opacity: 0; }
 }
 
+/* ── Status row (thinking / tool status) ── */
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  animation: msgAppear 0.2s ease;
+}
+
+.toolStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 500;
+  background: rgba(16,163,127,0.1);
+  border: 1px solid rgba(16,163,127,0.25);
+  color: rgba(255,255,255,0.85);
+}
+
+.thinkingPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 500;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.09);
+  color: rgba(255,255,255,0.55);
+}
+
+.toolStatusIcon { font-size: 13px; line-height: 1; }
+.toolStatusLabel, .thinkingLabel { letter-spacing: -0.01em; }
+
+.statusDots {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.statusDots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: dotBounce 1.2s infinite ease-in-out;
+  opacity: 0.6;
+}
+
+.statusDots span:nth-child(2) { animation-delay: 0.2s; }
+.statusDots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dotBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30%            { transform: translateY(-4px); opacity: 1; }
+}
+
+/* ── Slot cards ── */
+.slotCardsSection {
+  padding: 6px 0 4px 34px;
+  animation: msgAppear 0.25s ease;
+}
+
+.slotCardsLabel {
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  margin-bottom: 8px;
+}
+
+.slotCardsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.slotCard {
+  padding: 7px 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.slotCard:hover {
+  background: rgba(16,163,127,0.15);
+  border-color: rgba(16,163,127,0.4);
+  transform: translateY(-1px);
+}
+
+.slotCard:active { transform: translateY(0); }
+
+.slotCardIST {
+  font-size: 10px;
+  color: rgba(255,255,255,0.4);
+  margin-left: 2px;
+}
+
+/* ── Booking confirmation card ── */
+.bookingCard {
+  margin: 4px 0 4px 34px;
+  max-width: 300px;
+  background: linear-gradient(135deg, rgba(16,163,127,0.1), rgba(30,136,229,0.07));
+  border: 1px solid rgba(16,163,127,0.3);
+  border-radius: 14px;
+  padding: 14px 18px;
+  animation: msgAppear 0.3s ease;
+}
+
+.bookingCardHeader {
+  font-size: 14px;
+  font-weight: 600;
+  color: #10a37f;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.bookingCardCheck {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #10a37f;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.bookingCardRow {
+  font-size: 13px;
+  color: rgba(255,255,255,0.75);
+  margin-bottom: 5px;
+}
+
+.bookingCardLink {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #10a37f;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+
+.bookingCardLink:hover { opacity: 0.75; }
+
+/* ── Confetti ── */
+.confettiOverlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 10;
+}
+
+.confettiPiece {
+  position: absolute;
+  top: -10px;
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  animation: confettiFall 3.5s ease-in forwards;
+  left: calc(var(--i) * 5.5% + 2%);
+  animation-delay: calc(var(--i) * 0.12s);
+  background: hsl(calc(var(--i) * 22deg), 80%, 60%);
+}
+
+@keyframes confettiFall {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+/* ── Chat page wrapper (replaces .center when in chat mode) ── */
+.chatWrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.chatWrapper .chatContainer {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* ── Input area ── */
 .inputContainer {
   width: 100%;
-  max-width: 800px;
+  max-width: 720px;
   margin: 0 auto;
+  padding: 10px 16px 20px;
 }
 
 .inputWrapper {
   position: relative;
   display: flex;
   align-items: center;
+  background: #1c1c1e;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 22px;
+  transition: border-color 0.2s;
+}
+
+.inputWrapper:focus-within {
+  border-color: rgba(255,255,255,0.2);
 }
 
 .inputField {
-  width: 100%;
-  padding: 16px 90px 16px 18px;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
+  flex: 1;
+  padding: 13px 6px 13px 18px;
+  background: transparent;
+  border: none;
   color: white;
   font-size: 15px;
   outline: none;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   font-family: 'Inter', sans-serif;
   letter-spacing: -0.01em;
   resize: none;
+  max-height: 120px;
 }
 
-.inputField:focus {
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2), 0 0 0 2px rgba(255, 255, 255, 0.05);
-}
-
-.inputField::placeholder {
-  color: rgba(255, 255, 255, 0.4);
-}
+.inputField::placeholder { color: rgba(255,255,255,0.3); }
 
 .inputActions {
-  position: absolute;
-  right: 12px;
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
 }
 
 .sendButton {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   border: none;
-  background-color: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.35);
   cursor: not-allowed;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .sendButtonActive {
-  background-color: #1e88e5;
+  background: #2563eb;
   color: white;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(30, 136, 229, 0.4);
+  box-shadow: 0 2px 8px rgba(37,99,235,0.4);
 }
 
 .sendButtonActive:hover {
-  background-color: #2196f3;
+  background: #3b82f6;
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.5);
 }
 
-.sendButtonActive:active {
-  transform: scale(0.95);
-}
+.sendButtonActive:active { transform: scale(0.95); }
 
 .footer {
   text-align: center;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  padding: 16px;
-  margin-top: 20px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.25);
+  padding: 8px 16px 14px;
   letter-spacing: -0.01em;
 }
 
-/* Media queries for responsiveness */
-@media (max-width: 768px) {
-  .buttonGrid {
-    grid-template-columns: 1fr;
-  }
-  
-  .title {
-    font-size: 28px;
-  }
-}
-
-@media (max-width: 480px) {
-  .main {
-    padding: 16px 12px;
-  }
-  
-  .messageContent {
-    gap: 12px;
-  }
-  
-  .buttonContent {
-    gap: 10px;
-  }
-  
-  .buttonIcon {
-    width: 28px;
-    height: 28px;
-  }
-  
-  .buttonTitle {
-    font-size: 14px;
-  }
-  
-  .buttonDesc {
-    font-size: 12px;
-  }
-  
-  .inputField {
-    padding: 14px 80px 14px 16px;
-    font-size: 14px;
-  }
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .buttonGrid { grid-template-columns: 1fr; }
+  .title { font-size: 22px; }
+  .bubble { max-width: 85%; font-size: 14px; }
+  .chatContainer { padding: 14px 12px 6px; }
+  .inputContainer { padding: 8px 12px 16px; }
 }
