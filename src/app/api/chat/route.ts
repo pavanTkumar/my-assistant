@@ -1,75 +1,63 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI, Part, Content, FunctionDeclaration } from '@google/generative-ai';
 import { similaritySearch } from '@/lib/pinecone';
 import { getAvailableSlots, bookAppointment } from '@/lib/googleCalendar';
 import { sendTelegramMessage, formatBookingNotification, formatContactNotification } from '@/lib/telegram';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
 
-// ─── Tool definitions ──────────────────────────────────────────────────────
+// ─── Tool definitions (Gemini format) ─────────────────────────────────────
 
-const tools: OpenAI.Chat.ChatCompletionTool[] = [
+const functionDeclarations: FunctionDeclaration[] = [
   {
-    type: 'function',
-    function: {
-      name: 'search_pavan_info',
-      description: "Search for information about Pavan Tejavath — his background, skills, projects, services, education, contact details, work experience, etc. Use this whenever someone asks about Pavan.",
-      parameters: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'The search query' },
-        },
-        required: ['query'],
+    name: 'search_pavan_info',
+    description: "Search for information about Pavan Tejavath — his background, skills, projects, services, education, contact details, work experience, etc. Use this whenever someone asks about Pavan.",
+    parameters: {
+      type: 'object' as any,
+      properties: {
+        query: { type: 'string' as any, description: 'The search query' },
       },
+      required: ['query'],
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'check_available_slots',
-      description: "Check Pavan's available meeting slots on a given date. Returns a list of open time slots.",
-      parameters: {
-        type: 'object',
-        properties: {
-          date: { type: 'string', description: 'Date in YYYY-MM-DD format' },
-        },
-        required: ['date'],
+    name: 'check_available_slots',
+    description: "Check Pavan's available meeting slots on a given date. Returns a list of open time slots.",
+    parameters: {
+      type: 'object' as any,
+      properties: {
+        date: { type: 'string' as any, description: 'Date in YYYY-MM-DD format' },
       },
+      required: ['date'],
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'book_appointment',
-      description: "Book a meeting with Pavan. Only call this after the user has confirmed. Requires name, email, date (YYYY-MM-DD), and time (HH:MM 24-hour IST).",
-      parameters: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', description: "Guest's full name" },
-          email: { type: 'string', description: "Guest's email address" },
-          date: { type: 'string', description: 'Meeting date in YYYY-MM-DD format' },
-          time: { type: 'string', description: 'Meeting time in HH:MM 24-hour format (IST)' },
-        },
-        required: ['name', 'email', 'date', 'time'],
+    name: 'book_appointment',
+    description: "Book a meeting with Pavan. Only call this after the user has confirmed. Requires name, email, date (YYYY-MM-DD), and time (HH:MM 24-hour IST).",
+    parameters: {
+      type: 'object' as any,
+      properties: {
+        name: { type: 'string' as any, description: "Guest's full name" },
+        email: { type: 'string' as any, description: "Guest's email address" },
+        date: { type: 'string' as any, description: 'Meeting date in YYYY-MM-DD format' },
+        time: { type: 'string' as any, description: 'Meeting time in HH:MM 24-hour format (IST)' },
       },
+      required: ['name', 'email', 'date', 'time'],
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'contact_pavan',
-      description: "Send a message to Pavan via Telegram. Only call this after the user has reviewed and confirmed their message.",
-      parameters: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', description: "Sender's name" },
-          email: { type: 'string', description: "Sender's email" },
-          message: { type: 'string', description: 'The message to send to Pavan' },
-        },
-        required: ['name', 'email', 'message'],
+    name: 'contact_pavan',
+    description: "Send a message to Pavan via Telegram. Only call this after the user has reviewed and confirmed their message.",
+    parameters: {
+      type: 'object' as any,
+      properties: {
+        name: { type: 'string' as any, description: "Sender's name" },
+        email: { type: 'string' as any, description: "Sender's email" },
+        message: { type: 'string' as any, description: 'The message to send to Pavan' },
       },
+      required: ['name', 'email', 'message'],
     },
   },
 ];
@@ -185,116 +173,107 @@ const executeTool = async (
   }
 };
 
-// ─── Streaming agent loop ──────────────────────────────────────────────────
+// ─── Streaming agent loop (Gemini) ─────────────────────────────────────────
 
 async function runStreamingAgent(
-  messages: OpenAI.Chat.ChatCompletionMessageParam[],
+  messages: Array<{ role: string; content: string }>,
   sessionMemory: any,
   send: (data: object) => void
 ): Promise<void> {
-  const systemMessage: OpenAI.Chat.ChatCompletionSystemMessageParam = {
-    role: 'system',
-    content: getSystemPrompt() + (sessionMemory
-      ? `\n\nSESSION CONTEXT: ${sessionMemory.type === 'booking'
-          ? `User already booked a meeting on ${sessionMemory.date} at ${sessionMemory.time} IST for ${sessionMemory.name} (${sessionMemory.email}).`
-          : `User already sent a message to Pavan from ${sessionMemory.name} (${sessionMemory.email}).`}`
-      : ''),
-  };
+  const systemInstruction = getSystemPrompt() + (sessionMemory
+    ? `\n\nSESSION CONTEXT: ${sessionMemory.type === 'booking'
+        ? `User already booked a meeting on ${sessionMemory.date} at ${sessionMemory.time} IST for ${sessionMemory.name} (${sessionMemory.email}).`
+        : `User already sent a message to Pavan from ${sessionMemory.name} (${sessionMemory.email}).`}`
+    : '');
 
-  const currentMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [systemMessage, ...messages];
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    tools: [{ functionDeclarations }],
+    systemInstruction,
+    generationConfig: { temperature: 0.75 },
+  });
+
+  // Convert all messages except the last into Gemini history format
+  const history: Content[] = [];
+  for (const m of messages.slice(0, -1)) {
+    history.push({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    });
+  }
+
+  const chat = model.startChat({ history });
+  const lastUserMessage = messages[messages.length - 1].content;
+
   let finalSessionMemory = sessionMemory || null;
   const MAX_ITERATIONS = 6;
 
+  // First iteration sends the user message; subsequent ones send function results
+  let currentInput: string | Part[] = lastUserMessage;
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const stream = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: currentMessages,
-      tools,
-      tool_choice: 'auto',
-      stream: true,
-      temperature: 0.75,
-    });
+    const streamResult = await chat.sendMessageStream(currentInput);
 
-    let textContent = '';
-    const toolCallsMap: Record<number, { id: string; name: string; arguments: string }> = {};
-    let finishReason = '';
-
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta;
-      finishReason = chunk.choices[0]?.finish_reason || finishReason;
-
-      if (delta?.content) {
-        textContent += delta.content;
-        send({ type: 'token', content: delta.content });
-      }
-
-      if (delta?.tool_calls) {
-        for (const tc of delta.tool_calls) {
-          const idx = tc.index ?? 0;
-          if (!toolCallsMap[idx]) {
-            toolCallsMap[idx] = { id: tc.id || '', name: tc.function?.name || '', arguments: '' };
-          }
-          if (tc.id) toolCallsMap[idx].id = tc.id;
-          if (tc.function?.name) toolCallsMap[idx].name += tc.function.name;
-          if (tc.function?.arguments) toolCallsMap[idx].arguments += tc.function.arguments;
+    // Stream text tokens to the client
+    for await (const chunk of streamResult.stream) {
+      try {
+        const text = chunk.text();
+        if (text) {
+          send({ type: 'token', content: text });
         }
-      }
+      } catch { /* chunk may not have text (e.g., function call chunk) */ }
     }
 
-    const toolCalls = Object.values(toolCallsMap);
+    const response = await streamResult.response;
+    const functionCalls = response.functionCalls();
 
-    if (finishReason === 'stop' || toolCalls.length === 0) {
+    // No tool calls — done
+    if (!functionCalls || functionCalls.length === 0) {
       send({ type: 'done', sessionMemory: finalSessionMemory });
       return;
     }
 
-    if (finishReason === 'tool_calls' && toolCalls.length > 0) {
-      currentMessages.push({
-        role: 'assistant',
-        content: textContent || null,
-        tool_calls: toolCalls.map(tc => ({
-          id: tc.id,
-          type: 'function' as const,
-          function: { name: tc.name, arguments: tc.arguments },
-        })),
-      });
+    // Execute all tool calls and collect results
+    const functionResponseParts: Part[] = [];
 
-      for (const tc of toolCalls) {
-        let args: any = {};
-        try { args = JSON.parse(tc.arguments); } catch { /* bad json */ }
+    for (const fc of functionCalls) {
+      const args = (fc.args as any) || {};
 
-        send({ type: 'status', tool: tc.name, icon: toolIcons[tc.name] || '⚙️', label: getToolLabel(tc.name, args) });
+      send({ type: 'status', tool: fc.name, icon: toolIcons[fc.name] || '⚙️', label: getToolLabel(fc.name, args) });
 
-        let toolResult: any;
-        try {
-          const res = await executeTool(tc.name, args);
-          toolResult = res.result;
-          if (res.sessionMemory) finalSessionMemory = res.sessionMemory;
+      let toolResult: any;
+      try {
+        const res = await executeTool(fc.name, args);
+        toolResult = res.result;
+        if (res.sessionMemory) finalSessionMemory = res.sessionMemory;
 
-          // Emit structured card events for UI rendering
-          if (tc.name === 'check_available_slots' && toolResult.slots?.length > 0) {
-            send({ type: 'slots', date: toolResult.date, slots: toolResult.slots });
-          }
-          if (tc.name === 'book_appointment' && toolResult.success) {
-            send({
-              type: 'booking_confirmed',
-              name: args.name, email: args.email, date: args.date, time: args.time,
-              eventLink: toolResult.eventLink,
-            });
-          }
-        } catch (err: any) {
-          toolResult = { error: err.message || 'Tool failed' };
+        // Emit structured card events for UI
+        if (fc.name === 'check_available_slots' && toolResult.slots?.length > 0) {
+          send({ type: 'slots', date: toolResult.date, slots: toolResult.slots });
         }
-
-        send({ type: 'status_clear' });
-
-        currentMessages.push({
-          role: 'tool',
-          tool_call_id: tc.id,
-          content: JSON.stringify(toolResult),
-        });
+        if (fc.name === 'book_appointment' && toolResult.success) {
+          send({
+            type: 'booking_confirmed',
+            name: args.name, email: args.email, date: args.date, time: args.time,
+            eventLink: toolResult.eventLink,
+          });
+        }
+      } catch (err: any) {
+        toolResult = { error: err.message || 'Tool failed' };
       }
+
+      send({ type: 'status_clear' });
+
+      functionResponseParts.push({
+        functionResponse: {
+          name: fc.name,
+          response: toolResult,
+        },
+      });
     }
+
+    // Next iteration: send function results back to the model
+    currentInput = functionResponseParts;
   }
 
   send({ type: 'done', sessionMemory: finalSessionMemory });
@@ -317,12 +296,7 @@ export async function POST(request: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         };
         try {
-          // Map messages to OpenAI format
-          const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = messages.map((m: any) => ({
-            role: m.role as 'user' | 'assistant',
-            content: m.content,
-          }));
-          await runStreamingAgent(openaiMessages, sessionMemory, send);
+          await runStreamingAgent(messages, sessionMemory, send);
         } catch (err: any) {
           console.error('Agent error:', err);
           send({ type: 'error', message: 'Something went wrong. Please try again.' });
