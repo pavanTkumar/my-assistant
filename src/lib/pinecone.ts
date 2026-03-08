@@ -3,12 +3,19 @@ import { Document } from '@langchain/core/documents';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 
-// Gemini embedding helper (free, no OpenAI credits needed)
+// Gemini embedding helper — gemini-embedding-001 @ 768 dims (free, no OpenAI credits)
 const getEmbedding = async (text: string): Promise<number[]> => {
-  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
-  const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
-  const result = await model.embedContent(text);
-  return result.embedding.values;
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${process.env.GOOGLE_GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: { parts: [{ text }] }, outputDimensionality: 768 }),
+    }
+  );
+  if (!res.ok) throw new Error(`Gemini embedding error: ${await res.text()}`);
+  const data = await res.json();
+  return data.embedding.values;
 };
 
 // Initialize Pinecone client
