@@ -1,63 +1,75 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
-import { GoogleGenerativeAI, Part, Content, FunctionDeclaration } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 import { similaritySearch } from '@/lib/pinecone';
 import { getAvailableSlots, bookAppointment } from '@/lib/googleCalendar';
 import { sendTelegramMessage, formatBookingNotification, formatContactNotification } from '@/lib/telegram';
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// ─── Tool definitions (Gemini format) ─────────────────────────────────────
+// ─── Tool definitions (OpenAI format) ─────────────────────────────────────
 
-const functionDeclarations: FunctionDeclaration[] = [
+const tools: Groq.Chat.Completions.ChatCompletionTool[] = [
   {
-    name: 'search_pavan_info',
-    description: "Search for information about Pavan Tejavath — his background, skills, projects, services, education, contact details, work experience, etc. Use this whenever someone asks about Pavan.",
-    parameters: {
-      type: 'object' as any,
-      properties: {
-        query: { type: 'string' as any, description: 'The search query' },
+    type: 'function',
+    function: {
+      name: 'search_pavan_info',
+      description: "Search for information about Pavan Tejavath — his background, skills, projects, services, education, contact details, work experience, etc. Use this whenever someone asks about Pavan.",
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'The search query' },
+        },
+        required: ['query'],
       },
-      required: ['query'],
     },
   },
   {
-    name: 'check_available_slots',
-    description: "Check Pavan's available meeting slots on a given date. Returns a list of open time slots.",
-    parameters: {
-      type: 'object' as any,
-      properties: {
-        date: { type: 'string' as any, description: 'Date in YYYY-MM-DD format' },
+    type: 'function',
+    function: {
+      name: 'check_available_slots',
+      description: "Check Pavan's available meeting slots on a given date. Returns a list of open time slots.",
+      parameters: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', description: 'Date in YYYY-MM-DD format' },
+        },
+        required: ['date'],
       },
-      required: ['date'],
     },
   },
   {
-    name: 'book_appointment',
-    description: "Book a meeting with Pavan. Only call this after the user has confirmed. Requires name, email, date (YYYY-MM-DD), and time (HH:MM 24-hour IST).",
-    parameters: {
-      type: 'object' as any,
-      properties: {
-        name: { type: 'string' as any, description: "Guest's full name" },
-        email: { type: 'string' as any, description: "Guest's email address" },
-        date: { type: 'string' as any, description: 'Meeting date in YYYY-MM-DD format' },
-        time: { type: 'string' as any, description: 'Meeting time in HH:MM 24-hour format (IST)' },
+    type: 'function',
+    function: {
+      name: 'book_appointment',
+      description: "Book a meeting with Pavan. Only call this after the user has confirmed. Requires name, email, date (YYYY-MM-DD), and time (HH:MM 24-hour IST).",
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: "Guest's full name" },
+          email: { type: 'string', description: "Guest's email address" },
+          date: { type: 'string', description: 'Meeting date in YYYY-MM-DD format' },
+          time: { type: 'string', description: 'Meeting time in HH:MM 24-hour format (IST)' },
+        },
+        required: ['name', 'email', 'date', 'time'],
       },
-      required: ['name', 'email', 'date', 'time'],
     },
   },
   {
-    name: 'contact_pavan',
-    description: "Send a message to Pavan via Telegram. Only call this after the user has reviewed and confirmed their message.",
-    parameters: {
-      type: 'object' as any,
-      properties: {
-        name: { type: 'string' as any, description: "Sender's name" },
-        email: { type: 'string' as any, description: "Sender's email" },
-        message: { type: 'string' as any, description: 'The message to send to Pavan' },
+    type: 'function',
+    function: {
+      name: 'contact_pavan',
+      description: "Send a message to Pavan via Telegram. Only call this after the user has reviewed and confirmed their message.",
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: "Sender's name" },
+          email: { type: 'string', description: "Sender's email" },
+          message: { type: 'string', description: 'The message to send to Pavan' },
+        },
+        required: ['name', 'email', 'message'],
       },
-      required: ['name', 'email', 'message'],
     },
   },
 ];
@@ -173,85 +185,104 @@ const executeTool = async (
   }
 };
 
-// ─── Streaming agent loop (Gemini) ─────────────────────────────────────────
+// ─── Streaming agent loop (Groq) ───────────────────────────────────────────
 
 async function runStreamingAgent(
   messages: Array<{ role: string; content: string }>,
   sessionMemory: any,
   send: (data: object) => void
 ): Promise<void> {
-  const systemInstruction = getSystemPrompt() + (sessionMemory
+  const systemPrompt = getSystemPrompt() + (sessionMemory
     ? `\n\nSESSION CONTEXT: ${sessionMemory.type === 'booking'
         ? `User already booked a meeting on ${sessionMemory.date} at ${sessionMemory.time} IST for ${sessionMemory.name} (${sessionMemory.email}).`
         : `User already sent a message to Pavan from ${sessionMemory.name} (${sessionMemory.email}).`}`
     : '');
 
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    tools: [{ functionDeclarations }],
-    systemInstruction,
-    generationConfig: { temperature: 0.75 },
-  });
-
-  // Convert all messages except the last into Gemini history format
-  const history: Content[] = [];
-  for (const m of messages.slice(0, -1)) {
-    history.push({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    });
-  }
-
-  const chat = model.startChat({ history });
-  const lastUserMessage = messages[messages.length - 1].content;
+  // Build Groq messages array (system + full history)
+  const groqMessages: Groq.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemPrompt },
+    ...messages.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    })),
+  ];
 
   let finalSessionMemory = sessionMemory || null;
   const MAX_ITERATIONS = 6;
 
-  // First iteration sends the user message; subsequent ones send function results
-  let currentInput: string | Part[] = lastUserMessage;
-
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const streamResult = await chat.sendMessageStream(currentInput);
+    const stream = await groq.chat.completions.create({
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      messages: groqMessages,
+      tools,
+      tool_choice: 'auto',
+      parallel_tool_calls: false,
+      stream: true,
+      temperature: 0.75,
+      max_tokens: 1024,
+    });
 
-    // Stream text tokens to the client
-    for await (const chunk of streamResult.stream) {
-      try {
-        const text = chunk.text();
-        if (text) {
-          send({ type: 'token', content: text });
+    // Accumulate streamed content and tool calls
+    let fullContent = '';
+    const toolCallsMap: Record<number, { id: string; name: string; arguments: string }> = {};
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+
+      if (delta?.content) {
+        fullContent += delta.content;
+        send({ type: 'token', content: delta.content });
+      }
+
+      if (delta?.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index;
+          if (!toolCallsMap[idx]) {
+            toolCallsMap[idx] = { id: '', name: '', arguments: '' };
+          }
+          if (tc.id) toolCallsMap[idx].id = tc.id;
+          if (tc.function?.name) toolCallsMap[idx].name += tc.function.name;
+          if (tc.function?.arguments) toolCallsMap[idx].arguments += tc.function.arguments;
         }
-      } catch { /* chunk may not have text (e.g., function call chunk) */ }
+      }
     }
 
-    const response = await streamResult.response;
-    const functionCalls = response.functionCalls();
+    const toolCalls = Object.values(toolCallsMap);
 
-    // No tool calls — done
-    if (!functionCalls || functionCalls.length === 0) {
+    // No tool calls — we're done
+    if (toolCalls.length === 0) {
       send({ type: 'done', sessionMemory: finalSessionMemory });
       return;
     }
 
-    // Execute all tool calls and collect results
-    const functionResponseParts: Part[] = [];
+    // Append assistant message with tool calls to history
+    groqMessages.push({
+      role: 'assistant',
+      content: fullContent || null,
+      tool_calls: toolCalls.map(tc => ({
+        id: tc.id,
+        type: 'function' as const,
+        function: { name: tc.name, arguments: tc.arguments },
+      })),
+    });
 
-    for (const fc of functionCalls) {
-      const args = (fc.args as any) || {};
+    // Execute each tool and append results
+    for (const tc of toolCalls) {
+      let args: any = {};
+      try { args = JSON.parse(tc.arguments); } catch { /* keep empty */ }
 
-      send({ type: 'status', tool: fc.name, icon: toolIcons[fc.name] || '⚙️', label: getToolLabel(fc.name, args) });
+      send({ type: 'status', tool: tc.name, icon: toolIcons[tc.name] || '⚙️', label: getToolLabel(tc.name, args) });
 
       let toolResult: any;
       try {
-        const res = await executeTool(fc.name, args);
+        const res = await executeTool(tc.name, args);
         toolResult = res.result;
         if (res.sessionMemory) finalSessionMemory = res.sessionMemory;
 
-        // Emit structured card events for UI
-        if (fc.name === 'check_available_slots' && toolResult.slots?.length > 0) {
+        if (tc.name === 'check_available_slots' && toolResult.slots?.length > 0) {
           send({ type: 'slots', date: toolResult.date, slots: toolResult.slots });
         }
-        if (fc.name === 'book_appointment' && toolResult.success) {
+        if (tc.name === 'book_appointment' && toolResult.success) {
           send({
             type: 'booking_confirmed',
             name: args.name, email: args.email, date: args.date, time: args.time,
@@ -264,16 +295,12 @@ async function runStreamingAgent(
 
       send({ type: 'status_clear' });
 
-      functionResponseParts.push({
-        functionResponse: {
-          name: fc.name,
-          response: toolResult,
-        },
+      groqMessages.push({
+        role: 'tool',
+        tool_call_id: tc.id,
+        content: JSON.stringify(toolResult),
       });
     }
-
-    // Next iteration: send function results back to the model
-    currentInput = functionResponseParts;
   }
 
   send({ type: 'done', sessionMemory: finalSessionMemory });
