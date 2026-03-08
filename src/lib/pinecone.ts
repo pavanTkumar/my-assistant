@@ -1,7 +1,15 @@
 import { Pinecone, Index } from '@pinecone-database/pinecone';
 import { Document } from '@langchain/core/documents';
-import { OpenAIEmbeddings } from '@langchain/openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
+
+// Gemini embedding helper (free, no OpenAI credits needed)
+const getEmbedding = async (text: string): Promise<number[]> => {
+  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
+  const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+  const result = await model.embedContent(text);
+  return result.embedding.values;
+};
 
 // Initialize Pinecone client
 let pineconeClient: Pinecone | null = null;
@@ -31,10 +39,9 @@ export const addDocument = async (
 ): Promise<number> => {
   try {
     const index = await getPineconeIndex();
-    const openAIEmbeddings = new OpenAIEmbeddings({ openAIApiKey: process.env.OPENAI_API_KEY });
-    
     // Generate embedding for the text
-    const embedding = await openAIEmbeddings.embedDocuments([text]);
+    const embeddingValues = await getEmbedding(text);
+    const embedding = [embeddingValues];
     
     // Create a unique ID for the document
     const id = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -65,10 +72,8 @@ export const similaritySearch = async (
 ): Promise<Document[]> => {
   try {
     const index = await getPineconeIndex();
-    const openAIEmbeddings = new OpenAIEmbeddings({ openAIApiKey: process.env.OPENAI_API_KEY });
-    
     // Generate embedding for the query
-    const embedding = await openAIEmbeddings.embedQuery(query);
+    const embedding = await getEmbedding(query);
     
     // Query Pinecone
     const results = await index.query({
