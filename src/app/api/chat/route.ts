@@ -270,6 +270,18 @@ async function runStreamingAgent(
           const res = await executeTool(tc.name, args);
           toolResult = res.result;
           if (res.sessionMemory) finalSessionMemory = res.sessionMemory;
+
+          // Emit structured card events for UI rendering
+          if (tc.name === 'check_available_slots' && toolResult.slots?.length > 0) {
+            send({ type: 'slots', date: toolResult.date, slots: toolResult.slots });
+          }
+          if (tc.name === 'book_appointment' && toolResult.success) {
+            send({
+              type: 'booking_confirmed',
+              name: args.name, email: args.email, date: args.date, time: args.time,
+              eventLink: toolResult.eventLink,
+            });
+          }
         } catch (err: any) {
           toolResult = { error: err.message || 'Tool failed' };
         }

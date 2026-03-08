@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import styles from './page.module.css';
 import AppointmentModal from '@/components/AppointmentModal';
 import MessageModal from '@/components/MessageModal';
@@ -29,6 +30,11 @@ export default function Home() {
   const [toolStatus, setToolStatus] = useState<{ tool: string; icon: string; label: string } | null>(null);
   // Whether the first streaming token has arrived (controls which loading state to show)
   const [streamStarted, setStreamStarted] = useState(false);
+
+  // Rich card states
+  const [slotCards, setSlotCards] = useState<{ date: string; slots: { time: string }[] } | null>(null);
+  const [bookingCard, setBookingCard] = useState<{ name: string; email: string; date: string; time: string; eventLink?: string } | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
   
   // State for toast notifications
   const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
@@ -122,16 +128,16 @@ export default function Home() {
     }));
   };
   
-  // Handle form submission (sending message) — streams response token by token
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
+  // Core send logic — used by form submit, voice, and slot card taps
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || isLoading) return;
 
-    const userMessage = { role: 'user', content: input };
+    const userMessage = { role: 'user', content: text };
     const updatedMessages = [...messages, userMessage];
 
     setMessages([...updatedMessages, { role: 'assistant', content: '' }]);
-    setInput('');
+    setSlotCards(null);
+    setBookingCard(null);
     setIsLoading(true);
     setStreamStarted(false);
     setToolStatus(null);
@@ -174,6 +180,12 @@ export default function Home() {
                 updated[updated.length - 1] = { role: 'assistant', content: fullText };
                 return updated;
               });
+            } else if (event.type === 'slots') {
+              setSlotCards({ date: event.date, slots: event.slots });
+            } else if (event.type === 'booking_confirmed') {
+              setBookingCard({ name: event.name, email: event.email, date: event.date, time: event.time, eventLink: event.eventLink });
+              setShowConfetti(true);
+              setTimeout(() => setShowConfetti(false), 4000);
             } else if (event.type === 'done') {
               setToolStatus(null);
               if (event.sessionMemory) setSessionMemory(event.sessionMemory);
@@ -190,7 +202,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      setMessages(prev => prev.slice(0, -1)); // remove empty placeholder
+      setMessages(prev => prev.slice(0, -1));
       showToast('Failed to get a response. Please try again.', 'error');
     } finally {
       setIsLoading(false);
@@ -198,16 +210,22 @@ export default function Home() {
       setStreamStarted(false);
     }
   };
-  
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await sendMessage(input);
+    setInput('');
+  };
+
   // Handle voice input
   const handleVoiceInput = (transcript: string) => {
-    setInput(transcript);
-    
-    // Auto submit after voice input
-    setTimeout(() => {
-      const event = { preventDefault: () => {} } as React.FormEvent;
-      handleSubmit(event);
-    }, 500);
+    sendMessage(transcript);
+  };
+
+  // Handle slot card tap — auto-submits selected time
+  const handleSlotSelect = (date: string, time: string) => {
+    setSlotCards(null);
+    sendMessage(`I'll take the ${time} slot on ${date}`);
   };
   
   return (
@@ -341,6 +359,15 @@ export default function Home() {
             </>
           ) : (
             <div className={styles.chatContainer}>
+              {/* Confetti overlay on booking confirmation */}
+              {showConfetti && (
+                <div className={styles.confettiOverlay} aria-hidden>
+                  {Array.from({ length: 18 }).map((_, i) => (
+                    <span key={i} className={styles.confettiPiece} style={{ '--i': i } as React.CSSProperties} />
+                  ))}
+                </div>
+              )}
+
               {messages.map((message, index) => {
                 const isLastAssistant = index === messages.length - 1 && message.role === 'assistant';
                 const isStreaming = isLastAssistant && isLoading && streamStarted;
@@ -358,12 +385,49 @@ export default function Home() {
                         )}
                       </div>
                       <div className={`${styles.text} ${isStreaming ? styles.streamingText : ''}`}>
-                        {message.content}
+                        {message.role === 'assistant'
+                          ? <ReactMarkdown>{message.content}</ReactMarkdown>
+                          : message.content}
                       </div>
                     </div>
                   </div>
                 );
               })}
+
+              {/* Tappable slot cards */}
+              {slotCards && !isLoading && (
+                <div className={styles.slotCardsSection}>
+                  <p className={styles.slotCardsLabel}>Pick a time slot for {slotCards.date}:</p>
+                  <div className={styles.slotCardsRow}>
+                    {slotCards.slots.slice(0, 8).map((slot) => (
+                      <button
+                        key={slot.time}
+                        className={styles.slotCard}
+                        onClick={() => handleSlotSelect(slotCards.date, slot.time)}
+                      >
+                        {slot.time} <span className={styles.slotCardIST}>IST</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Booking confirmation card */}
+              {bookingCard && (
+                <div className={styles.bookingCard}>
+                  <div className={styles.bookingCardHeader}>
+                    <span className={styles.bookingCardCheck}>✓</span> Booking Confirmed
+                  </div>
+                  <div className={styles.bookingCardRow}>📅 {bookingCard.date} · {bookingCard.time} IST</div>
+                  <div className={styles.bookingCardRow}>👤 {bookingCard.name}</div>
+                  <div className={styles.bookingCardRow}>📧 {bookingCard.email}</div>
+                  {bookingCard.eventLink && (
+                    <a href={bookingCard.eventLink} target="_blank" rel="noreferrer" className={styles.bookingCardLink}>
+                      Open in Google Calendar →
+                    </a>
+                  )}
+                </div>
+              )}
 
               {isLoading && (toolStatus !== null || !streamStarted) && (
                 <div className={styles.statusRow}>

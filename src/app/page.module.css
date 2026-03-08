@@ -285,6 +285,170 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Markdown rendering inside assistant messages ── */
+.text :global(p) { margin: 0 0 0.5em; }
+.text :global(p:last-child) { margin-bottom: 0; }
+.text :global(strong) { font-weight: 600; color: rgba(255,255,255,0.95); }
+.text :global(em) { font-style: italic; color: rgba(255,255,255,0.85); }
+.text :global(ul), .text :global(ol) { margin: 0.4em 0 0.6em 1.2em; padding: 0; }
+.text :global(li) { margin-bottom: 0.25em; }
+.text :global(code) {
+  font-family: 'Menlo', monospace;
+  font-size: 13px;
+  background: rgba(255,255,255,0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.text :global(pre) {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.text :global(blockquote) {
+  border-left: 3px solid rgba(16,163,127,0.5);
+  margin: 0.4em 0;
+  padding-left: 12px;
+  color: rgba(255,255,255,0.7);
+}
+
+/* ── Slot cards ── */
+.slotCardsSection {
+  padding: 4px 16px 8px 62px;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+  animation: pillAppear 0.3s ease;
+}
+
+.slotCardsLabel {
+  font-size: 12px;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+
+.slotCardsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.slotCard {
+  padding: 8px 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: -0.01em;
+}
+
+.slotCard:hover {
+  background: rgba(16,163,127,0.15);
+  border-color: rgba(16,163,127,0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16,163,127,0.15);
+}
+
+.slotCard:active {
+  transform: translateY(0);
+}
+
+.slotCardIST {
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+  margin-left: 2px;
+}
+
+/* ── Booking confirmation card ── */
+.bookingCard {
+  margin: 8px 16px 8px 62px;
+  max-width: 340px;
+  background: linear-gradient(135deg, rgba(16,163,127,0.12), rgba(30,136,229,0.08));
+  border: 1px solid rgba(16,163,127,0.35);
+  border-radius: 16px;
+  padding: 16px 20px;
+  animation: pillAppear 0.35s ease;
+}
+
+.bookingCardHeader {
+  font-size: 15px;
+  font-weight: 600;
+  color: #10a37f;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bookingCardCheck {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #10a37f;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bookingCardRow {
+  font-size: 13px;
+  color: rgba(255,255,255,0.8);
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+.bookingCardLink {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #10a37f;
+  text-decoration: none;
+  letter-spacing: -0.01em;
+  transition: opacity 0.15s;
+}
+
+.bookingCardLink:hover { opacity: 0.8; }
+
+/* ── Confetti ── */
+.confettiOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 10;
+}
+
+.confettiPiece {
+  position: absolute;
+  top: -10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  animation: confettiFall 3.5s ease-in forwards;
+  left: calc(var(--i) * 5.5% + 2%);
+  animation-delay: calc(var(--i) * 0.12s);
+  background: hsl(calc(var(--i) * 22deg), 80%, 60%);
+}
+
+@keyframes confettiFall {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
 /* ── Streaming cursor ── */
 .streamingText::after {
   content: '▋';
