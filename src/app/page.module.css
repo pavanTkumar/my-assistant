@@ -209,36 +209,94 @@
   flex: 1;
 }
 
-.loadingIndicator {
+/* ── Status row (tool status + thinking pill) ── */
+.statusRow {
   display: flex;
-  justify-content: center;
-  gap: 4px;
-  padding: 12px 0;
+  padding: 2px 16px 2px 62px; /* aligns with message text (30px avatar + 16px gap + 16px padding) */
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-.loadingDot {
-  width: 8px;
-  height: 8px;
-  background-color: rgba(255, 255, 255, 0.5);
+.toolStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  background: linear-gradient(135deg, rgba(16, 163, 127, 0.15), rgba(30, 136, 229, 0.12));
+  border: 1px solid rgba(16, 163, 127, 0.3);
+  color: rgba(255, 255, 255, 0.9);
+  animation: pillAppear 0.25s ease;
+}
+
+.thinkingPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.65);
+  animation: pillAppear 0.25s ease;
+}
+
+.toolStatusIcon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.toolStatusLabel,
+.thinkingLabel {
+  letter-spacing: -0.01em;
+}
+
+.statusDots {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+}
+
+.statusDots span {
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
-  animation: bounce 1.4s infinite ease-in-out both;
+  background: currentColor;
+  animation: statusDotBounce 1.2s infinite ease-in-out;
+  opacity: 0.6;
 }
 
-.loadingDot:nth-child(1) {
-  animation-delay: -0.32s;
+.statusDots span:nth-child(2) { animation-delay: 0.2s; }
+.statusDots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes statusDotBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-4px); opacity: 1; }
 }
 
-.loadingDot:nth-child(2) {
-  animation-delay: -0.16s;
+@keyframes pillAppear {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes bounce {
-  0%, 80%, 100% {
-    transform: scale(0);
-  }
-  40% {
-    transform: scale(1);
-  }
+/* ── Streaming cursor ── */
+.streamingText::after {
+  content: '▋';
+  display: inline;
+  margin-left: 1px;
+  color: #10a37f;
+  animation: cursorBlink 0.85s step-end infinite;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
 }
 
 .inputContainer {

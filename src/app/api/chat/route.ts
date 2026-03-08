@@ -1,531 +1,335 @@
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from 'next/server';
-import { generateRagResponse, isContactQuery, isAppointmentQuery } from '@/lib/langchain';
+import { NextRequest } from 'next/server';
+import OpenAI from 'openai';
+import { similaritySearch } from '@/lib/pinecone';
 import { getAvailableSlots, bookAppointment } from '@/lib/googleCalendar';
 import { sendTelegramMessage, formatBookingNotification, formatContactNotification } from '@/lib/telegram';
-import { ChatOpenAI } from '@langchain/openai';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
-type ConversationMessage = { role: string; content: string };
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Lightweight AI model for entity extraction
-const extractorModel = new ChatOpenAI({
-  openAIApiKey: process.env.OPENAI_API_KEY,
-  modelName: 'gpt-4o-mini',
-  temperature: 0,
-});
+// ─── Tool definitions ──────────────────────────────────────────────────────
 
-// Extract a date from natural language (returns YYYY-MM-DD or null)
-const extractDate = async (message: string): Promise<string | null> => {
+const tools: OpenAI.Chat.ChatCompletionTool[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'search_pavan_info',
+      description: "Search for information about Pavan Tejavath — his background, skills, projects, services, education, contact details, work experience, etc. Use this whenever someone asks about Pavan.",
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'The search query' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'check_available_slots',
+      description: "Check Pavan's available meeting slots on a given date. Returns a list of open time slots.",
+      parameters: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', description: 'Date in YYYY-MM-DD format' },
+        },
+        required: ['date'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'book_appointment',
+      description: "Book a meeting with Pavan. Only call this after the user has confirmed. Requires name, email, date (YYYY-MM-DD), and time (HH:MM 24-hour IST).",
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: "Guest's full name" },
+          email: { type: 'string', description: "Guest's email address" },
+          date: { type: 'string', description: 'Meeting date in YYYY-MM-DD format' },
+          time: { type: 'string', description: 'Meeting time in HH:MM 24-hour format (IST)' },
+        },
+        required: ['name', 'email', 'date', 'time'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'contact_pavan',
+      description: "Send a message to Pavan via Telegram. Only call this after the user has reviewed and confirmed their message.",
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: "Sender's name" },
+          email: { type: 'string', description: "Sender's email" },
+          message: { type: 'string', description: 'The message to send to Pavan' },
+        },
+        required: ['name', 'email', 'message'],
+      },
+    },
+  },
+];
+
+// ─── System prompt ─────────────────────────────────────────────────────────
+
+const getSystemPrompt = (): string => {
   const now = new Date();
-  const msg = message.toLowerCase();
+  const istDate = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
+  }).format(now);
+  const istTime = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+  }).format(now);
 
-  if (/\b(today|now|tonight|this (morning|afternoon|evening))\b/.test(msg)) {
-    return now.toISOString().split('T')[0];
-  }
-  if (/\btomorrow\b/.test(msg)) {
-    const tmr = new Date(now);
-    tmr.setDate(tmr.getDate() + 1);
-    return tmr.toISOString().split('T')[0];
-  }
-  if (/\bday after tomorrow\b/.test(msg)) {
-    const dat = new Date(now);
-    dat.setDate(dat.getDate() + 2);
-    return dat.toISOString().split('T')[0];
-  }
-  const isoMatch = message.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-  if (isoMatch) return isoMatch[1];
+  return `You are the personal AI assistant of Pavan Tejavath — sharp, warm, witty, and fiercely loyal to Pavan.
 
-  const today = now.toISOString().split('T')[0];
-  try {
-    const res = await extractorModel.invoke([
-      new SystemMessage(
-        `Today is ${today}. Extract the date from the user's message and return ONLY a date in YYYY-MM-DD format. ` +
-        `For relative days like "next Monday", calculate the actual date. ` +
-        `If no date is mentioned at all, return "none". Do not include any other text.`
-      ),
-      new HumanMessage(message),
-    ]);
-    const content = typeof res.content === 'string' ? res.content.trim() : '';
-    return /^\d{4}-\d{2}-\d{2}$/.test(content) ? content : null;
-  } catch {
-    return null;
+TODAY: ${istDate}, ${istTime} IST (India Standard Time, UTC+5:30)
+
+PERSONALITY:
+- Friendly-professional with cinematic flair. Short, punchy, memorable responses.
+- Adapt to the user's language: English, Telugu script (తెలుగు), or Tanglish (Telugu-English mix like "ra", "babu", "cheppu", "enti", "undi").
+- If someone writes in Telugu or Tanglish, respond warmly in kind.
+- Use the user's name naturally once you learn it.
+- Never robotic or scripted. Sound like a real human assistant who's clever and cares.
+
+WHEN TO USE TOOLS:
+- Someone asks about Pavan (skills, projects, background, contact) → search_pavan_info
+- Someone wants to schedule a meeting → check_available_slots first, then book_appointment
+- Someone wants to message Pavan → contact_pavan (after collecting name, email, message and user confirms)
+- Off-topic questions → deflect with personality, bring it back to Pavan
+
+BOOKING RULES:
+- Collect name, email, date, and time naturally — never ask for info already in the conversation
+- Check available slots BEFORE confirming a time
+- Show slots clearly, let user pick one
+- CONFIRM the booking details with the user BEFORE calling book_appointment
+- After confirming, mention all times are IST
+
+CONTACT RULES:
+- Collect name, email, and message naturally
+- Show a preview: "Here's what I'll send: [message] — shall I send this?"
+- Only call contact_pavan AFTER the user says yes/confirms
+
+STYLE GUIDE:
+- Ego/confident user → match with wit: "You clearly care — otherwise you wouldn't be here."
+- Polite user → warm and helpful: "Great question! Let me check that for you."
+- Telugu user → "Adhe ra, Pavan gurinchi correct ga adigaav!"
+- Tanglish → "Sure ra, check chestaa — oka second!"
+- Keep responses concise. No walls of text. Personality over length.`;
+};
+
+// ─── Tool labels (shown in UI status) ─────────────────────────────────────
+
+const getToolLabel = (name: string, args: any): string => {
+  switch (name) {
+    case 'search_pavan_info': return 'Looking that up...';
+    case 'check_available_slots': return `Checking Pavan's calendar for ${args.date || 'that date'}...`;
+    case 'book_appointment': return `Booking ${args.time || ''} on ${args.date || ''}...`;
+    case 'contact_pavan': return 'Sending your message to Pavan...';
+    default: return 'Working on it...';
   }
 };
 
-// Extract email address from text
-const extractEmail = (text: string): string | null => {
-  const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-  return match ? match[0] : null;
+const toolIcons: Record<string, string> = {
+  search_pavan_info: '🔍',
+  check_available_slots: '📅',
+  book_appointment: '✅',
+  contact_pavan: '✉️',
 };
 
-// ─── Conversation context helpers ──────────────────────────────────────────
+// ─── Tool executor ─────────────────────────────────────────────────────────
 
-// Scan full message history to find name and email the user has already provided
-const extractUserInfoFromConversation = (messages: ConversationMessage[]) => {
-  let userName: string | null = null;
-  let userEmail: string | null = null;
-
-  // Scan all user messages for email and explicit name patterns
-  for (const msg of messages) {
-    if (msg.role !== 'user') continue;
-    const email = extractEmail(msg.content);
-    if (email) userEmail = email;
-
-    const namePatterns = [
-      /my name is ([a-zA-Z][\w ]{1,30})/i,
-      /i'?m ([a-zA-Z][\w ]{1,30})[.,!]?\s*$/i,
-      /call me ([a-zA-Z][\w ]{1,30})/i,
-    ];
-    for (const pat of namePatterns) {
-      const m = msg.content.match(pat);
-      if (m) { userName = m[1].trim(); break; }
+const executeTool = async (
+  name: string,
+  args: any
+): Promise<{ result: any; sessionMemory?: any }> => {
+  switch (name) {
+    case 'search_pavan_info': {
+      const docs = await similaritySearch(args.query);
+      if (docs.length === 0) return { result: { found: false } };
+      return { result: { found: true, context: docs.map((d: any) => d.pageContent).join('\n\n') } };
     }
-  }
-
-  // Most reliable: assistant asked "what's your name?" → very next user message is the name
-  for (let i = 0; i < messages.length - 1; i++) {
-    const curr = messages[i];
-    const next = messages[i + 1];
-    if (curr.role !== 'assistant' || next.role !== 'user') continue;
-    const a = curr.content.toLowerCase();
-    const u = next.content.trim();
-    if (
-      (a.includes("what's your name") || a.includes("your name?") ||
-       a.includes("share your name") || a.includes("what is your name")) &&
-      u.length >= 2 && u.length < 60 &&
-      !u.includes('@') &&
-      !/^(yes|no|sure|ok|cancel|nevermind|nope)/i.test(u)
-    ) {
-      userName = u;
+    case 'check_available_slots': {
+      const slots = await getAvailableSlots(args.date);
+      return { result: { date: args.date, slots } };
     }
-  }
-
-  return { userName, userEmail };
-};
-
-// User is hinting that info was already given ("you already know my name", etc.)
-const isReferringToKnown = (msg: string): boolean => {
-  const m = msg.toLowerCase();
-  return (
-    m.includes('you already know') ||
-    m.includes('already told you') ||
-    m.includes('same as before') ||
-    m.includes('same name') ||
-    m.includes('same email') ||
-    m.includes('as mentioned') ||
-    m.includes('already gave') ||
-    m.includes('already said') ||
-    (m.includes('you know') && (m.includes('name') || m.includes('email')))
-  );
-};
-
-// ─── Session follow-up helpers ─────────────────────────────────────────────
-
-// Answer a follow-up question using completed session context
-const answerFromSession = async (
-  question: string,
-  sessionMemory: { type: string; date?: string; time?: string; name: string; email: string }
-): Promise<string> => {
-  const ctx =
-    sessionMemory.type === 'booking'
-      ? `The user just booked a meeting with Pavan Tejavath on ${sessionMemory.date} at ${sessionMemory.time} IST (India Standard Time, UTC+5:30). Pavan will reach out before the meeting to ${sessionMemory.email}.`
-      : `The user just sent a message to Pavan Tejavath from ${sessionMemory.name}. Reply will go to ${sessionMemory.email}.`;
-
-  const res = await extractorModel.invoke([
-    new SystemMessage(
-      `You are Pavan Tejavath's assistant. Answer the user's follow-up question based ONLY on this context:\n${ctx}\nBe concise and friendly.`
-    ),
-    new HumanMessage(question),
-  ]);
-  return typeof res.content === 'string' ? res.content.trim() : '';
-};
-
-const isSessionFollowUp = (msg: string): boolean => {
-  const m = msg.toLowerCase();
-  return [
-    'that', 'it ', 'this ', 'the meeting', 'my booking', 'i booked', 'i scheduled',
-    'my appointment', 'the booking', 'timezone', 'time zone', 'ist', 'est', 'gmt',
-    'invite', 'already booked', 'confirmation', 'what time', 'which time',
-    'the slot', 'what date', 'which date',
-  ].some(t => m.includes(t));
-};
-
-// ─── Utility ───────────────────────────────────────────────────────────────
-
-const isCancellation = (msg: string): boolean => {
-  const m = msg.toLowerCase().trim();
-  return (
-    m.includes('cancel') ||
-    m.includes('never mind') ||
-    m.includes('nevermind') ||
-    m.includes('no thanks') ||
-    m === 'no' || m === 'nope' || m === 'nah'
-  );
-};
-
-const parseSlotSelection = (message: string, slots: Array<{ time: string }>): { time: string } | null => {
-  const msg = message.toLowerCase().trim();
-  const numMatch = msg.match(/\b([1-6])\b/);
-  if (numMatch) {
-    const index = parseInt(numMatch[1]) - 1;
-    if (index >= 0 && index < slots.length) return slots[index];
-  }
-  for (const slot of slots) {
-    if (msg.includes(slot.time)) return slot;
-    const [h] = slot.time.split(':').map(Number);
-    const ampm = h < 12 ? 'am' : 'pm';
-    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    if (msg.includes(`${h12} ${ampm}`) || msg.includes(`${h12}${ampm}`) || msg.includes(`${h12}:00`)) {
-      return slot;
-    }
-  }
-  const ordinals = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'];
-  for (let i = 0; i < ordinals.length; i++) {
-    if (msg.includes(ordinals[i]) && slots[i]) return slots[i];
-  }
-  return null;
-};
-
-// ─── Booking flow ──────────────────────────────────────────────────────────
-
-async function handleBookingFlow(
-  userMessage: string,
-  state: any,
-  messages: ConversationMessage[]
-): Promise<NextResponse> {
-  const stage = state?.stage || 'initial';
-  const { userName: knownName, userEmail: knownEmail } = extractUserInfoFromConversation(messages);
-
-  if (stage !== 'initial' && isCancellation(userMessage)) {
-    return NextResponse.json({
-      response: 'No worries! Let me know if you want to schedule something later.',
-      bookingState: null,
-    });
-  }
-
-  if (stage === 'initial') {
-    const date = await extractDate(userMessage);
-    if (date) return fetchAndShowSlots(date);
-    return NextResponse.json({
-      response: "Sure! What date would you like to meet? You can say something like 'tomorrow', 'next Monday', or 'March 5'.",
-      bookingState: { stage: 'date_asked' },
-    });
-  }
-
-  if (stage === 'date_asked') {
-    const date = await extractDate(userMessage);
-    if (!date) {
-      return NextResponse.json({
-        response: "I didn't catch a date. Could you mention a specific date like 'February 25' or '2026-02-28'?",
-        bookingState: { stage: 'date_asked' },
-      });
-    }
-    return fetchAndShowSlots(date);
-  }
-
-  if (stage === 'slots_shown') {
-    const slot = parseSlotSelection(userMessage, state.slots);
-    if (!slot) {
-      const slotList = state.slots.map((s: any, i: number) => `${i + 1}. ${s.time}`).join('\n');
-      return NextResponse.json({
-        response: `Please pick one of these slots by number or time:\n\n${slotList}`,
-        bookingState: state,
-      });
-    }
-    // Already know both name and email — skip straight to confirmation
-    if (knownName && knownEmail) {
-      return NextResponse.json({
-        response: `${slot.time} on ${state.date} — locked in!\n\n📅 Date: ${state.date}\n⏰ Time: ${slot.time} IST\n👤 Name: ${knownName}\n📧 Email: ${knownEmail}\n\nShall I confirm the booking? (yes / no)`,
-        bookingState: { ...state, stage: 'confirming', selectedSlot: slot, userName: knownName, userEmail: knownEmail },
-      });
-    }
-    // Already know name — skip that question
-    if (knownName) {
-      return NextResponse.json({
-        response: `${slot.time} on ${state.date} — great choice, ${knownName}! What's the best email to reach you?`,
-        bookingState: { ...state, stage: 'email_asked', selectedSlot: slot, userName: knownName },
-      });
-    }
-    return NextResponse.json({
-      response: `${slot.time} on ${state.date} — perfect! What's your name?`,
-      bookingState: { ...state, stage: 'name_asked', selectedSlot: slot },
-    });
-  }
-
-  if (stage === 'name_asked') {
-    let name = userMessage.trim();
-    // Handle "you already know my name" style responses
-    if (isReferringToKnown(userMessage) && knownName) name = knownName;
-    if (!name || name.length < 2) {
-      return NextResponse.json({ response: "Could you share your name?", bookingState: state });
-    }
-    // Already know email — skip to confirmation
-    if (knownEmail) {
-      return NextResponse.json({
-        response: `Got it, ${name}!\n\n📅 Date: ${state.date}\n⏰ Time: ${state.selectedSlot.time} IST\n👤 Name: ${name}\n📧 Email: ${knownEmail}\n\nShall I confirm? (yes / no)`,
-        bookingState: { ...state, stage: 'confirming', userName: name, userEmail: knownEmail },
-      });
-    }
-    return NextResponse.json({
-      response: `Nice to meet you, ${name}! What's your email address?`,
-      bookingState: { ...state, stage: 'email_asked', userName: name },
-    });
-  }
-
-  if (stage === 'email_asked') {
-    let email = extractEmail(userMessage);
-    // Handle "same email / you know my email" style responses
-    if (!email && isReferringToKnown(userMessage) && knownEmail) email = knownEmail;
-    if (!email) {
-      return NextResponse.json({
-        response: "I need a valid email for the calendar booking. Could you share it?",
-        bookingState: state,
-      });
-    }
-    const { date, selectedSlot, userName } = state;
-    return NextResponse.json({
-      response: `Almost there!\n\n📅 Date: ${date}\n⏰ Time: ${selectedSlot.time} IST\n👤 Name: ${userName}\n📧 Email: ${email}\n\nShall I confirm the booking? (yes / no)`,
-      bookingState: { ...state, stage: 'confirming', userEmail: email },
-    });
-  }
-
-  if (stage === 'confirming') {
-    const msg = userMessage.toLowerCase();
-    const confirmed =
-      msg.includes('yes') || msg.includes('confirm') || msg.includes('sure') || msg.includes('ok') || msg.includes('book');
-
-    if (!confirmed) {
-      return NextResponse.json({
-        response: "No problem! Would you like to choose a different slot or start over?",
-        bookingState: null,
-      });
-    }
-
-    const { date, selectedSlot, userName, userEmail } = state;
-    try {
-      await bookAppointment(userName, userEmail, date, selectedSlot.time, 30, 'Meeting with Pavan Tejavath');
-
-      // Non-blocking Telegram notification
-      sendTelegramMessage(
-        formatBookingNotification(userName, userEmail, date, selectedSlot.time)
-      ).catch((err: any) => console.error('Telegram notification failed:', err?.message));
-
-      return NextResponse.json({
-        response: `Booking confirmed! 🎉\n\n📅 ${date} at ${selectedSlot.time} IST\n👤 ${userName}\n📧 ${userEmail}\n\nPavan will reach out to you at ${userEmail} before the meeting. See you then!`,
-        bookingState: null,
-        sessionMemory: { type: 'booking', date, time: selectedSlot.time, name: userName, email: userEmail },
-      });
-    } catch (err: any) {
-      console.error('Booking error:', err);
-      return NextResponse.json({
-        response: `Something went wrong with the booking (${err.message}). Please try again.`,
-        bookingState: { ...state, stage: 'confirming' },
-      });
-    }
-  }
-
-  return NextResponse.json({
-    response: "What date would you like to book the meeting?",
-    bookingState: { stage: 'date_asked' },
-  });
-}
-
-// ─── Calendar slots helper ─────────────────────────────────────────────────
-
-async function fetchAndShowSlots(date: string): Promise<NextResponse> {
-  try {
-    const slots = await getAvailableSlots(date);
-    if (slots.length === 0) {
-      const isToday = date === new Date().toISOString().split('T')[0];
-      return NextResponse.json({
-        response: isToday
-          ? `All slots for today (${date}) are past working hours. Want to check tomorrow instead?`
-          : `No open slots on ${date}. Would you like to try a different date?`,
-        bookingState: { stage: 'date_asked' },
-      });
-    }
-    const available = slots.slice(0, 6);
-    const slotList = available.map((s: any, i: number) => `${i + 1}. ${s.time}`).join('\n');
-    return NextResponse.json({
-      response: `Here are the available slots on ${date}:\n\n${slotList}\n\nWhich one works for you?`,
-      bookingState: { stage: 'slots_shown', date, slots: available },
-    });
-  } catch (err: any) {
-    console.error('Calendar API error for date', date, ':', err?.message || err);
-    const status = err?.response?.status || err?.code;
-    const isAuthError =
-      status === 401 || status === 403 ||
-      err?.message?.toLowerCase().includes('auth') ||
-      err?.message?.toLowerCase().includes('permission');
-    return NextResponse.json({
-      response: isAuthError
-        ? "I can't access the calendar right now. Please reach out to Pavan directly at pavan@thetejavath.com."
-        : `I had trouble checking availability for ${date}. Could you try another date?`,
-      bookingState: { stage: 'date_asked' },
-    });
-  }
-}
-
-// ─── Contact flow ──────────────────────────────────────────────────────────
-
-async function handleContactFlow(
-  userMessage: string,
-  state: any,
-  messages: ConversationMessage[]
-): Promise<NextResponse> {
-  const stage = state?.stage || 'initial';
-  const { userName: knownName, userEmail: knownEmail } = extractUserInfoFromConversation(messages);
-
-  if (stage !== 'initial' && isCancellation(userMessage)) {
-    return NextResponse.json({
-      response: "Alright, no worries! Feel free to ask if you'd like to reach out later.",
-      contactState: null,
-    });
-  }
-
-  if (stage === 'initial') {
-    // Already know both — go straight to message collection
-    if (knownName && knownEmail) {
-      return NextResponse.json({
-        response: `Happy to pass that along to Pavan, ${knownName}! What would you like to tell him?`,
-        contactState: { stage: 'collecting_message', userName: knownName, userEmail: knownEmail },
-      });
-    }
-    if (knownName) {
-      return NextResponse.json({
-        response: `Happy to help, ${knownName}! What's your email address so Pavan can reply?`,
-        contactState: { stage: 'collecting_email', userName: knownName },
-      });
-    }
-    return NextResponse.json({
-      response: "I'd be happy to pass your message along to Pavan! What's your name?",
-      contactState: { stage: 'collecting_name' },
-    });
-  }
-
-  if (stage === 'collecting_name') {
-    let name = userMessage.trim();
-    if (isReferringToKnown(userMessage) && knownName) name = knownName;
-    if (!name || name.length < 2) {
-      return NextResponse.json({
-        response: "Could you share your name so Pavan knows who to reply to?",
-        contactState: state,
-      });
-    }
-    // Already know email — skip to message
-    if (knownEmail) {
-      return NextResponse.json({
-        response: `Thanks, ${name}! What would you like to tell Pavan?`,
-        contactState: { stage: 'collecting_message', userName: name, userEmail: knownEmail },
-      });
-    }
-    return NextResponse.json({
-      response: `Thanks, ${name}! What's your email address?`,
-      contactState: { stage: 'collecting_email', userName: name },
-    });
-  }
-
-  if (stage === 'collecting_email') {
-    let email = extractEmail(userMessage);
-    if (!email && isReferringToKnown(userMessage) && knownEmail) email = knownEmail;
-    if (!email) {
-      return NextResponse.json({
-        response: "I need a valid email address so Pavan can reply. Could you share it?",
-        contactState: state,
-      });
-    }
-    return NextResponse.json({
-      response: "Got it! What would you like to tell Pavan?",
-      contactState: { ...state, stage: 'collecting_message', userEmail: email },
-    });
-  }
-
-  if (stage === 'collecting_message') {
-    const msgContent = userMessage.trim();
-    const { userName, userEmail } = state;
-    return NextResponse.json({
-      response: `Here's what I'll send to Pavan:\n\n"${msgContent}"\n\nFrom: ${userName} (${userEmail})\n\nShall I send this? (yes / no)`,
-      contactState: { ...state, stage: 'confirming', msgContent },
-    });
-  }
-
-  if (stage === 'confirming') {
-    const msg = userMessage.toLowerCase();
-    const confirmed =
-      msg.includes('yes') || msg.includes('send') || msg.includes('sure') || msg.includes('ok');
-
-    if (!confirmed) {
-      return NextResponse.json({
-        response: "No worries! Feel free to rephrase and I'll help you send it.",
-        contactState: null,
-      });
-    }
-
-    const { userName, userEmail, msgContent } = state;
-    try {
-      await sendTelegramMessage(
-        formatContactNotification(userName, userEmail, msgContent)
+    case 'book_appointment': {
+      const booking = await bookAppointment(
+        args.name, args.email, args.date, args.time, 30, 'Meeting with Pavan Tejavath'
       );
-      return NextResponse.json({
-        response: `Your message has been sent to Pavan! 📨\n\nHe'll get back to you at ${userEmail} within 24–48 hours.`,
-        contactState: null,
-        sessionMemory: { type: 'contact', name: userName, email: userEmail },
+      sendTelegramMessage(
+        formatBookingNotification(args.name, args.email, args.date, args.time)
+      ).catch((e: any) => console.error('Telegram notification failed:', e?.message));
+      return {
+        result: { ...booking, success: true },
+        sessionMemory: { type: 'booking', date: args.date, time: args.time, name: args.name, email: args.email },
+      };
+    }
+    case 'contact_pavan': {
+      await sendTelegramMessage(
+        formatContactNotification(args.name, args.email, args.message)
+      );
+      return {
+        result: { success: true },
+        sessionMemory: { type: 'contact', name: args.name, email: args.email },
+      };
+    }
+    default:
+      return { result: { error: 'Unknown tool' } };
+  }
+};
+
+// ─── Streaming agent loop ──────────────────────────────────────────────────
+
+async function runStreamingAgent(
+  messages: OpenAI.Chat.ChatCompletionMessageParam[],
+  sessionMemory: any,
+  send: (data: object) => void
+): Promise<void> {
+  const systemMessage: OpenAI.Chat.ChatCompletionSystemMessageParam = {
+    role: 'system',
+    content: getSystemPrompt() + (sessionMemory
+      ? `\n\nSESSION CONTEXT: ${sessionMemory.type === 'booking'
+          ? `User already booked a meeting on ${sessionMemory.date} at ${sessionMemory.time} IST for ${sessionMemory.name} (${sessionMemory.email}).`
+          : `User already sent a message to Pavan from ${sessionMemory.name} (${sessionMemory.email}).`}`
+      : ''),
+  };
+
+  const currentMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [systemMessage, ...messages];
+  let finalSessionMemory = sessionMemory || null;
+  const MAX_ITERATIONS = 6;
+
+  for (let i = 0; i < MAX_ITERATIONS; i++) {
+    const stream = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: currentMessages,
+      tools,
+      tool_choice: 'auto',
+      stream: true,
+      temperature: 0.75,
+    });
+
+    let textContent = '';
+    const toolCallsMap: Record<number, { id: string; name: string; arguments: string }> = {};
+    let finishReason = '';
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      finishReason = chunk.choices[0]?.finish_reason || finishReason;
+
+      if (delta?.content) {
+        textContent += delta.content;
+        send({ type: 'token', content: delta.content });
+      }
+
+      if (delta?.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index ?? 0;
+          if (!toolCallsMap[idx]) {
+            toolCallsMap[idx] = { id: tc.id || '', name: tc.function?.name || '', arguments: '' };
+          }
+          if (tc.id) toolCallsMap[idx].id = tc.id;
+          if (tc.function?.name) toolCallsMap[idx].name += tc.function.name;
+          if (tc.function?.arguments) toolCallsMap[idx].arguments += tc.function.arguments;
+        }
+      }
+    }
+
+    const toolCalls = Object.values(toolCallsMap);
+
+    if (finishReason === 'stop' || toolCalls.length === 0) {
+      send({ type: 'done', sessionMemory: finalSessionMemory });
+      return;
+    }
+
+    if (finishReason === 'tool_calls' && toolCalls.length > 0) {
+      currentMessages.push({
+        role: 'assistant',
+        content: textContent || null,
+        tool_calls: toolCalls.map(tc => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: { name: tc.name, arguments: tc.arguments },
+        })),
       });
-    } catch (err: any) {
-      console.error('Telegram send error:', err?.message);
-      return NextResponse.json({
-        response: `I wasn't able to deliver the message right now. You can reach Pavan directly at pavan@thetejavath.com — sorry for the trouble!`,
-        contactState: null,
-      });
+
+      for (const tc of toolCalls) {
+        let args: any = {};
+        try { args = JSON.parse(tc.arguments); } catch { /* bad json */ }
+
+        send({ type: 'status', tool: tc.name, icon: toolIcons[tc.name] || '⚙️', label: getToolLabel(tc.name, args) });
+
+        let toolResult: any;
+        try {
+          const res = await executeTool(tc.name, args);
+          toolResult = res.result;
+          if (res.sessionMemory) finalSessionMemory = res.sessionMemory;
+        } catch (err: any) {
+          toolResult = { error: err.message || 'Tool failed' };
+        }
+
+        send({ type: 'status_clear' });
+
+        currentMessages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: JSON.stringify(toolResult),
+        });
+      }
     }
   }
 
-  return NextResponse.json({
-    response: "I'd be happy to help you contact Pavan. What's your name?",
-    contactState: { stage: 'collecting_name' },
-  });
+  send({ type: 'done', sessionMemory: finalSessionMemory });
 }
 
-// ─── Main POST handler ─────────────────────────────────────────────────────
+// ─── POST handler ──────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { messages = [], bookingState, contactState, sessionMemory } = body;
+    const { messages = [], sessionMemory } = await request.json();
 
     if (!Array.isArray(messages) || messages.length === 0) {
-      return NextResponse.json({ error: 'Messages array is required' }, { status: 400 });
+      return new Response(JSON.stringify({ error: 'Messages array is required' }), { status: 400 });
     }
 
-    const latestMessage = messages[messages.length - 1];
-    const userMessage: string = latestMessage?.content || '';
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (data: object) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        };
+        try {
+          // Map messages to OpenAI format
+          const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = messages.map((m: any) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          }));
+          await runStreamingAgent(openaiMessages, sessionMemory, send);
+        } catch (err: any) {
+          console.error('Agent error:', err);
+          send({ type: 'error', message: 'Something went wrong. Please try again.' });
+          send({ type: 'done', sessionMemory: null });
+        } finally {
+          controller.close();
+        }
+      },
+    });
 
-    // --- BOOKING FLOW ---
-    if (bookingState?.stage || (!contactState?.stage && isAppointmentQuery(userMessage))) {
-      return handleBookingFlow(userMessage, bookingState || null, messages);
-    }
-
-    // --- CONTACT FLOW ---
-    if (contactState?.stage || isContactQuery(userMessage)) {
-      return handleContactFlow(userMessage, contactState || null, messages);
-    }
-
-    // --- SESSION FOLLOW-UP ---
-    if (sessionMemory && isSessionFollowUp(userMessage)) {
-      const response = await answerFromSession(userMessage, sessionMemory);
-      if (response) return NextResponse.json({ response, sessionMemory });
-    }
-
-    // --- GENERAL RAG ---
-    const response = await generateRagResponse(userMessage);
-    return NextResponse.json({ response, sessionMemory: sessionMemory || null });
-  } catch (error: any) {
-    console.error('Error in chat API:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to process chat request' },
-      { status: 500 }
-    );
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'X-Accel-Buffering': 'no',
+      },
+    });
+  } catch (err: any) {
+    console.error('POST handler error:', err);
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
 }

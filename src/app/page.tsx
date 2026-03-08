@@ -22,11 +22,13 @@ export default function Home() {
   const [appointmentModalOpen, setAppointmentModalOpen] = useState(false);
   const [messageModalOpen, setMessageModalOpen] = useState(false);
 
-  // Conversational flow state (sent to API each turn)
-  const [bookingState, setBookingState] = useState<any>(null);
-  const [contactState, setContactState] = useState<any>(null);
   // Session memory — persists for the browser session so follow-up questions work
   const [sessionMemory, setSessionMemory] = useState<any>(null);
+
+  // Tool status — shown while AI is executing a tool (checking calendar, booking, etc.)
+  const [toolStatus, setToolStatus] = useState<{ tool: string; icon: string; label: string } | null>(null);
+  // Whether the first streaming token has arrived (controls which loading state to show)
+  const [streamStarted, setStreamStarted] = useState(false);
   
   // State for toast notifications
   const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
@@ -120,69 +122,80 @@ export default function Home() {
     }));
   };
   
-  // Handle form submission (sending message)
+  // Handle form submission (sending message) — streams response token by token
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
-    
-    // Add user message to chat
-    const userMessage = {
-      role: 'user',
-      content: input,
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
+
+    const userMessage = { role: 'user', content: input };
+    const updatedMessages = [...messages, userMessage];
+
+    setMessages([...updatedMessages, { role: 'assistant', content: '' }]);
     setInput('');
     setIsLoading(true);
-    
+    setStreamStarted(false);
+    setToolStatus(null);
+
     try {
-      // Call the chat API
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: [...messages, userMessage],
-          bookingState,
-          contactState,
-          sessionMemory,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: updatedMessages, sessionMemory }),
       });
-      
-      if (!response.ok) {
-        throw new Error('Failed to get a response');
-      }
-      
-      const data = await response.json();
-      
-      // Add assistant response to chat
-      const assistantMessage = {
-        role: 'assistant',
-        content: data.response,
-      };
-      
-      setMessages(prev => [...prev, assistantMessage]);
 
-      // Sync conversational flow states back from API response
-      if ('bookingState' in data) {
-        setBookingState(data.bookingState || null);
-      }
-      if ('contactState' in data) {
-        setContactState(data.contactState || null);
-      }
-      // Persist session memory when booking/contact completes (or keep existing)
-      if (data.sessionMemory) {
-        setSessionMemory(data.sessionMemory);
-      }
+      if (!response.ok || !response.body) throw new Error('Failed to get a response');
 
-      // Speak the response
-      speakText(data.response);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let fullText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'status') {
+              setToolStatus({ tool: event.tool, icon: event.icon, label: event.label });
+            } else if (event.type === 'status_clear') {
+              setToolStatus(null);
+            } else if (event.type === 'token') {
+              fullText += event.content;
+              setStreamStarted(true);
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: 'assistant', content: fullText };
+                return updated;
+              });
+            } else if (event.type === 'done') {
+              setToolStatus(null);
+              if (event.sessionMemory) setSessionMemory(event.sessionMemory);
+              speakText(fullText);
+            } else if (event.type === 'error') {
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: 'assistant', content: event.message || 'Something went wrong. Please try again.' };
+                return updated;
+              });
+            }
+          } catch { /* malformed event chunk */ }
+        }
+      }
     } catch (error) {
       console.error('Error sending message:', error);
+      setMessages(prev => prev.slice(0, -1)); // remove empty placeholder
       showToast('Failed to get a response. Please try again.', 'error');
     } finally {
       setIsLoading(false);
+      setToolStatus(null);
+      setStreamStarted(false);
     }
   };
   
@@ -328,32 +341,47 @@ export default function Home() {
             </>
           ) : (
             <div className={styles.chatContainer}>
-              {messages.map((message, index) => (
-                <div 
-                  key={index} 
-                  className={`${styles.message} ${message.role === 'user' ? styles.userMessage : styles.assistantMessage}`}
-                >
-                  <div className={styles.messageContent}>
-                    <div className={styles.avatar}>
-                      {message.role === 'user' ? (
-                        <div className={styles.userAvatar}>You</div>
-                      ) : (
-                        <div className={styles.assistantAvatar}>AI</div>
-                      )}
+              {messages.map((message, index) => {
+                const isLastAssistant = index === messages.length - 1 && message.role === 'assistant';
+                const isStreaming = isLastAssistant && isLoading && streamStarted;
+                return (
+                  <div
+                    key={index}
+                    className={`${styles.message} ${message.role === 'user' ? styles.userMessage : styles.assistantMessage}`}
+                  >
+                    <div className={styles.messageContent}>
+                      <div className={styles.avatar}>
+                        {message.role === 'user' ? (
+                          <div className={styles.userAvatar}>You</div>
+                        ) : (
+                          <div className={styles.assistantAvatar}>AI</div>
+                        )}
+                      </div>
+                      <div className={`${styles.text} ${isStreaming ? styles.streamingText : ''}`}>
+                        {message.content}
+                      </div>
                     </div>
-                    <div className={styles.text}>{message.content}</div>
                   </div>
-                </div>
-              ))}
-              
-              {isLoading && (
-                <div className={styles.loadingIndicator}>
-                  <div className={styles.loadingDot}></div>
-                  <div className={styles.loadingDot}></div>
-                  <div className={styles.loadingDot}></div>
+                );
+              })}
+
+              {isLoading && (toolStatus !== null || !streamStarted) && (
+                <div className={styles.statusRow}>
+                  {toolStatus ? (
+                    <div className={styles.toolStatus}>
+                      <span className={styles.toolStatusIcon}>{toolStatus.icon}</span>
+                      <span className={styles.toolStatusLabel}>{toolStatus.label}</span>
+                      <span className={styles.statusDots}><span/><span/><span/></span>
+                    </div>
+                  ) : (
+                    <div className={styles.thinkingPill}>
+                      <span className={styles.thinkingLabel}>Thinking</span>
+                      <span className={styles.statusDots}><span/><span/><span/></span>
+                    </div>
+                  )}
                 </div>
               )}
-              
+
               <div ref={messagesEndRef} />
             </div>
           )}
