@@ -380,14 +380,34 @@ export default function Home() {
                 const isUser = message.role === 'user';
                 const isLastAssistant = index === messages.length - 1 && !isUser;
                 const isStreaming = isLastAssistant && isLoading && streamStarted;
-                if (!message.content && !isLastAssistant) return null;
+                const isThinking = isLastAssistant && isLoading && !streamStarted && !toolStatus;
+                const hasToolStatus = isLastAssistant && isLoading && !!toolStatus;
+                // Skip empty non-loading assistant messages
+                if (!isUser && !message.content && !isLastAssistant) return null;
                 return (
                   <div key={index} className={`${styles.messageRow} ${isUser ? styles.userRow : styles.assistantRow}`}>
-                    {!isUser && <div className={styles.aiAvatar}>P</div>}
-                    <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.aiBubble} ${isStreaming ? styles.streamingText : ''}`}>
-                      {isUser
-                        ? message.content
-                        : <ReactMarkdown>{message.content}</ReactMarkdown>}
+                    <div className={styles.messageInner}>
+                      {!isUser && <div className={styles.aiAvatar}>P</div>}
+                      <div className={isUser ? styles.userBody : styles.assistantBody}>
+                        {isUser ? (
+                          message.content
+                        ) : isThinking ? (
+                          <div className={styles.thinkingPill}>
+                            <span className={styles.thinkingLabel}>Thinking</span>
+                            <span className={styles.statusDots}><span/><span/><span/></span>
+                          </div>
+                        ) : hasToolStatus ? (
+                          <div className={styles.toolStatus}>
+                            <span className={styles.toolStatusIcon}>{toolStatus!.icon}</span>
+                            <span className={styles.toolStatusLabel}>{toolStatus!.label}</span>
+                            <span className={styles.statusDots}><span/><span/><span/></span>
+                          </div>
+                        ) : (
+                          <div className={isStreaming ? styles.streamingText : ''}>
+                            <ReactMarkdown>{message.content}</ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -395,54 +415,46 @@ export default function Home() {
 
               {/* Tappable slot cards */}
               {slotCards && !isLoading && (
-                <div className={styles.slotCardsSection}>
-                  <p className={styles.slotCardsLabel}>Pick a time slot for {slotCards.date}:</p>
-                  <div className={styles.slotCardsRow}>
-                    {slotCards.slots.slice(0, 8).map((slot) => (
-                      <button
-                        key={slot.time}
-                        className={styles.slotCard}
-                        onClick={() => handleSlotSelect(slotCards.date, slot.time)}
-                      >
-                        {slot.time} <span className={styles.slotCardIST}>IST</span>
-                      </button>
-                    ))}
+                <div className={styles.assistantRow}>
+                  <div className={styles.messageInner}>
+                    <div className={styles.aiAvatarSpacer} />
+                    <div className={styles.slotCardsSection}>
+                      <p className={styles.slotCardsLabel}>Pick a slot for {slotCards.date}:</p>
+                      <div className={styles.slotCardsRow}>
+                        {slotCards.slots.slice(0, 9).map((slot) => (
+                          <button
+                            key={slot.time}
+                            className={styles.slotCard}
+                            onClick={() => handleSlotSelect(slotCards.date, slot.time)}
+                          >
+                            {slot.time} <span className={styles.slotCardIST}>IST</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* Booking confirmation card */}
               {bookingCard && (
-                <div className={styles.bookingCard}>
-                  <div className={styles.bookingCardHeader}>
-                    <span className={styles.bookingCardCheck}>✓</span> Booking Confirmed
+                <div className={styles.assistantRow}>
+                  <div className={styles.messageInner}>
+                    <div className={styles.aiAvatarSpacer} />
+                    <div className={styles.bookingCard}>
+                      <div className={styles.bookingCardHeader}>
+                        <span className={styles.bookingCardCheck}>✓</span> Booking Confirmed
+                      </div>
+                      <div className={styles.bookingCardRow}><span>📅</span>{bookingCard.date} · {bookingCard.time} IST</div>
+                      <div className={styles.bookingCardRow}><span>👤</span>{bookingCard.name}</div>
+                      <div className={styles.bookingCardRow}><span>📧</span>{bookingCard.email}</div>
+                      {bookingCard.eventLink && (
+                        <a href={bookingCard.eventLink} target="_blank" rel="noreferrer" className={styles.bookingCardLink}>
+                          Open in Google Calendar →
+                        </a>
+                      )}
+                    </div>
                   </div>
-                  <div className={styles.bookingCardRow}>📅 {bookingCard.date} · {bookingCard.time} IST</div>
-                  <div className={styles.bookingCardRow}>👤 {bookingCard.name}</div>
-                  <div className={styles.bookingCardRow}>📧 {bookingCard.email}</div>
-                  {bookingCard.eventLink && (
-                    <a href={bookingCard.eventLink} target="_blank" rel="noreferrer" className={styles.bookingCardLink}>
-                      Open in Google Calendar →
-                    </a>
-                  )}
-                </div>
-              )}
-
-              {isLoading && (toolStatus !== null || !streamStarted) && (
-                <div className={styles.statusRow}>
-                  <div className={styles.aiAvatar}>P</div>
-                  {toolStatus ? (
-                    <div className={styles.toolStatus}>
-                      <span className={styles.toolStatusIcon}>{toolStatus.icon}</span>
-                      <span className={styles.toolStatusLabel}>{toolStatus.label}</span>
-                      <span className={styles.statusDots}><span/><span/><span/></span>
-                    </div>
-                  ) : (
-                    <div className={styles.thinkingPill}>
-                      <span className={styles.thinkingLabel}>Thinking</span>
-                      <span className={styles.statusDots}><span/><span/><span/></span>
-                    </div>
-                  )}
                 </div>
               )}
 
