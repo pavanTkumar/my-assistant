@@ -158,6 +158,9 @@ const executeTool = async (
       return { result: { date: args.date, slots } };
     }
     case 'book_appointment': {
+      if (!args.name?.trim() || !args.email?.trim()) {
+        return { result: { error: 'Cannot book — name and email are required. Ask the user for them first.' } };
+      }
       const booking = await bookAppointment(
         args.name, args.email, args.date, args.time, 30, 'Meeting with Pavan Tejavath'
       );
@@ -170,6 +173,9 @@ const executeTool = async (
       };
     }
     case 'contact_pavan': {
+      if (!args.name?.trim() || !args.email?.trim() || !args.message?.trim()) {
+        return { result: { error: 'Cannot send — name, email, and message are all required. Ask the user for any missing info.' } };
+      }
       await sendTelegramMessage(
         formatContactNotification(args.name, args.email, args.message)
       );

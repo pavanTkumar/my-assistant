@@ -17,12 +17,10 @@
   display: flex;
   align-items: center;
   padding: 0 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
   background: #212121;
-  position: sticky;
-  top: 0;
-  z-index: 10;
   flex-shrink: 0;
+  z-index: 10;
 }
 
 .headerContent {
@@ -39,10 +37,10 @@
   height: 8px;
   border-radius: 50%;
   background: #10a37f;
-  box-shadow: 0 0 8px rgba(16,163,127,0.6);
+  box-shadow: 0 0 6px rgba(16,163,127,0.7);
 }
 
-/* ─── Main scroll area ───────────────────────────────── */
+/* ─── Main ───────────────────────────────────────────── */
 .main {
   flex: 1;
   display: flex;
@@ -58,8 +56,8 @@
   justify-content: center;
   flex: 1;
   gap: 28px;
-  width: 100%;
   max-width: 680px;
+  width: 100%;
   margin: 0 auto;
   padding: 32px 20px;
 }
@@ -78,12 +76,12 @@
 .title span:first-child {
   font-size: 14px;
   font-weight: 400;
-  color: rgba(255,255,255,0.45);
+  color: rgba(255,255,255,0.4);
 }
 
 .rotatingPrompt { transition: opacity 0.4s, transform 0.4s; }
-.fadeOut { opacity: 0; transform: translateY(-6px); }
-.fadeIn  { animation: fadeIn 0.4s forwards; }
+.fadeOut        { opacity: 0; transform: translateY(-6px); }
+.fadeIn         { animation: fadeIn 0.4s forwards; }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -104,15 +102,10 @@
   color: white;
   text-align: left;
   cursor: pointer;
-  transition: background 0.18s, border-color 0.18s, transform 0.18s;
+  transition: background 0.18s, transform 0.15s;
 }
 
-.actionButton:hover {
-  background: #333;
-  border-color: rgba(255,255,255,0.15);
-  transform: translateY(-1px);
-}
-
+.actionButton:hover  { background: #333; transform: translateY(-1px); }
 .actionButton:active { transform: none; }
 
 .buttonContent { display: flex; align-items: flex-start; gap: 12px; }
@@ -125,10 +118,10 @@
   flex-shrink: 0;
 }
 
-.buttonTitle  { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
-.buttonDesc   { font-size: 12px; color: rgba(255,255,255,0.45); line-height: 1.3; }
+.buttonTitle { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.buttonDesc  { font-size: 12px; color: rgba(255,255,255,0.4); line-height: 1.3; }
 
-/* ─── Chat wrapper (replaces .center when chat active) ─ */
+/* ─── Chat wrapper ───────────────────────────────────── */
 .chatWrapper {
   display: flex;
   flex-direction: column;
@@ -139,89 +132,66 @@
 .chatContainer {
   flex: 1;
   overflow-y: auto;
-  position: relative;
-  scroll-behavior: smooth;
+  padding: 16px 0 8px;
 }
 
 /* ─── Message rows ───────────────────────────────────── */
 .messageRow {
-  width: 100%;
-  padding: 16px 0;
+  padding: 6px 0;
 }
 
-.assistantRow {
-  background: rgba(255,255,255,0.025);
-}
-
-.userRow {
-  background: transparent;
-}
-
-/* ─── Inner centred content ─────────────────────────── */
+/* Inner centred content — max 700px */
 .messageInner {
   max-width: 700px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 20px;
   display: flex;
-  gap: 16px;
   align-items: flex-start;
+  gap: 12px;
 }
 
-/* ─── Avatars ────────────────────────────────────────── */
+/* User rows: push the inner to the right */
+.userRow .messageInner {
+  flex-direction: row-reverse;
+}
+
+/* ─── Avatar ─────────────────────────────────────────── */
 .aiAvatar {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: linear-gradient(135deg, #10a37f 0%, #1a73e8 100%);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: white;
-  margin-top: 1px;
+  margin-top: 2px;
 }
 
-/* Invisible spacer so cards align with avatar-bearing rows */
+/* Invisible spacer so cards line up under avatar rows */
 .aiAvatarSpacer {
-  width: 30px;
+  width: 28px;
   flex-shrink: 0;
 }
 
-/* ─── Message body text ─────────────────────────────── */
+/* ─── Assistant body ─────────────────────────────────── */
 .assistantBody {
   flex: 1;
   font-size: 15px;
   line-height: 1.65;
-  color: rgba(255,255,255,0.9);
+  color: rgba(255,255,255,0.88);
   min-width: 0;
 }
 
-.userBody {
-  flex: 1;
-  font-size: 15px;
-  line-height: 1.65;
-  color: rgba(255,255,255,0.92);
-  min-width: 0;
-  /* right-align user text by using a max-width pill */
-  display: flex;
-  justify-content: flex-end;
-}
-
-/* User text pill */
-.userBody > * {
-  display: inline-block;
-}
-
-/* Markdown inside assistant body */
-.assistantBody :global(p)            { margin: 0 0 0.55em; }
+.assistantBody :global(p)            { margin: 0 0 0.5em; }
 .assistantBody :global(p:last-child) { margin-bottom: 0; }
 .assistantBody :global(strong)       { font-weight: 600; color: white; }
-.assistantBody :global(em)           { font-style: italic; }
 .assistantBody :global(ul),
 .assistantBody :global(ol)           { margin: 0.3em 0 0.5em 1.2em; padding: 0; }
-.assistantBody :global(li)           { margin-bottom: 0.25em; }
+.assistantBody :global(li)           { margin-bottom: 0.2em; }
 .assistantBody :global(code) {
   font-family: 'Menlo', monospace;
   font-size: 13px;
@@ -229,13 +199,17 @@
   padding: 1px 5px;
   border-radius: 4px;
 }
-.assistantBody :global(pre) {
-  background: #1a1a1a;
-  border-radius: 8px;
-  padding: 12px 14px;
-  overflow-x: auto;
-  font-size: 13px;
-  margin: 0.5em 0;
+
+/* ─── User bubble ────────────────────────────────────── */
+.userBody {
+  max-width: 72%;
+  background: #2f6feb;
+  color: white;
+  padding: 10px 14px;
+  border-radius: 18px 18px 4px 18px;
+  font-size: 15px;
+  line-height: 1.55;
+  word-break: break-word;
 }
 
 /* ─── Streaming cursor ───────────────────────────────── */
@@ -248,7 +222,7 @@
 }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
-/* ─── Thinking / Tool status (inline in message) ─────── */
+/* ─── Thinking / Tool status ─────────────────────────── */
 .thinkingPill {
   display: inline-flex;
   align-items: center;
@@ -256,7 +230,7 @@
   padding: 8px 14px;
   border-radius: 20px;
   font-size: 13px;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255,255,255,0.45);
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.08);
 }
@@ -268,9 +242,9 @@
   padding: 8px 14px;
   border-radius: 20px;
   font-size: 13px;
-  color: rgba(255,255,255,0.75);
+  color: rgba(255,255,255,0.7);
   background: rgba(16,163,127,0.08);
-  border: 1px solid rgba(16,163,127,0.22);
+  border: 1px solid rgba(16,163,127,0.2);
 }
 
 .thinkingLabel, .toolStatusLabel { letter-spacing: -0.01em; }
@@ -291,7 +265,7 @@
   30%          { transform: translateY(-4px); opacity: 1; }
 }
 
-/* ─── Slot cards (white) ────────────────────────────── */
+/* ─── Slot cards (white pills) ───────────────────────── */
 .slotCardsSection { padding: 4px 0; }
 
 .slotCardsLabel {
@@ -303,16 +277,16 @@
 .slotCardsRow { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .slotCard {
-  padding: 8px 16px;
-  background: white;
+  padding: 7px 16px;
+  background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 20px;
   color: #111;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 
 .slotCard:hover {
@@ -320,7 +294,6 @@
   border-color: #10a37f;
   color: #065f46;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(16,163,127,0.15);
 }
 
 .slotCard:active { transform: none; }
@@ -331,18 +304,18 @@
   margin-left: 2px;
 }
 
-/* ─── Booking confirmation card (white) ─────────────── */
+/* ─── Booking card (white) ───────────────────────────── */
 .bookingCard {
-  background: white;
+  background: #fff;
   border-radius: 12px;
   padding: 16px 20px;
-  max-width: 320px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-  animation: popIn 0.25s ease;
+  max-width: 300px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+  animation: popIn 0.22s ease;
 }
 
 @keyframes popIn {
-  from { opacity: 0; transform: scale(0.97) translateY(6px); }
+  from { opacity: 0; transform: scale(0.97) translateY(4px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
@@ -419,7 +392,7 @@
   width: 100%;
   max-width: 700px;
   margin: 0 auto;
-  padding: 10px 20px 20px;
+  padding: 8px 20px 18px;
   flex-shrink: 0;
 }
 
@@ -429,14 +402,14 @@
   background: #2a2a2a;
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 14px;
-  transition: border-color 0.2s;
+  transition: border-color 0.18s;
 }
 
 .inputWrapper:focus-within { border-color: rgba(255,255,255,0.22); }
 
 .inputField {
   flex: 1;
-  padding: 13px 6px 13px 16px;
+  padding: 12px 6px 12px 16px;
   background: transparent;
   border: none;
   color: white;
@@ -461,36 +434,35 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: rgba(255,255,255,0.28);
+  color: rgba(255,255,255,0.25);
   cursor: not-allowed;
   display: flex; align-items: center; justify-content: center;
-  transition: all 0.18s;
+  transition: all 0.15s;
 }
 
 .sendButtonActive {
   background: #10a37f;
   color: white;
   cursor: pointer;
-  border-radius: 8px;
 }
 
 .sendButtonActive:hover  { background: #0d8c6b; }
-.sendButtonActive:active { transform: scale(0.93); }
+.sendButtonActive:active { transform: scale(0.92); }
 
 /* ─── Footer ─────────────────────────────────────────── */
 .footer {
   text-align: center;
   font-size: 11px;
-  color: rgba(255,255,255,0.2);
-  padding: 6px 16px 12px;
+  color: rgba(255,255,255,0.18);
+  padding: 5px 16px 12px;
 }
 
 /* ─── Responsive ─────────────────────────────────────── */
 @media (max-width: 600px) {
-  .buttonGrid         { grid-template-columns: 1fr; }
-  .title              { font-size: 20px; }
-  .messageInner       { padding: 0 14px; gap: 12px; }
-  .assistantBody,
-  .userBody           { font-size: 14px; }
-  .inputContainer     { padding: 8px 12px 16px; }
+  .buttonGrid   { grid-template-columns: 1fr; }
+  .title        { font-size: 21px; }
+  .messageInner { padding: 0 14px; gap: 10px; }
+  .assistantBody, .userBody { font-size: 14px; }
+  .inputContainer { padding: 6px 12px 14px; }
+  .userBody { max-width: 84%; }
 }
