@@ -8,26 +8,69 @@ import MessageModal from '@/components/MessageModal';
 import Toast, { ToastType } from '@/components/Toast';
 import VoiceButton from '@/components/VoiceButton';
 import Splash from '@/components/Splash';
+import Flame from '@/components/Flame';
 import { speakText } from '@/lib/speech';
 
 const ONBOARDED_KEY = 'myai_onboarded'; // localStorage: user has seen the splash
 const SESSION_NAME_KEY = 'myai_name';   // sessionStorage: session-only (declined) name
+
+// Home-screen suggestion cards. `prompt` is what actually gets sent to the agent.
+const SUGGESTIONS = [
+  {
+    id: 'appt',
+    title: 'Set up appointments',
+    subtitle: 'Schedule a meeting with Pavan',
+    prompt: "I'd like to schedule a meeting with Pavan",
+    icon: (
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M8 3v4M16 3v4M3 10h18" /></svg>
+    ),
+  },
+  {
+    id: 'msg',
+    title: 'Send a message',
+    subtitle: 'Contact Pavan directly',
+    prompt: "I'd like to send a message to Pavan",
+    icon: (
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a8 8 0 1 1-3.3-6.4L21 4l-1 4.2A7.9 7.9 0 0 1 21 12Z" /></svg>
+    ),
+  },
+  {
+    id: 'info',
+    title: 'Get information',
+    subtitle: "Learn about Pavan's Projects?",
+    prompt: "Tell me about Pavan's projects and expertise",
+    icon: (
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>
+    ),
+  },
+  {
+    id: 'learn',
+    title: 'Learn something',
+    subtitle: 'Discover The Tejavath',
+    prompt: 'What topics do you know about The Tejavath?',
+    icon: (
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21V5.5Z" /><path d="M20 18.5H6.5A2.5 2.5 0 0 0 4 21" /></svg>
+    ),
+  },
+];
+
+const SPRING = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 
 export default function HomeClient({ userName }: { userName?: string }) {
   // State for input and chat
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
 
   // Effective display name: server-persisted (userName) → session-only → none.
   const [effectiveName, setEffectiveName] = useState<string | undefined>(userName);
   // Splash decides on the client (needs localStorage/sessionStorage), so start hidden.
   const [showSplash, setShowSplash] = useState(false);
 
-  // State for rotating prompts
-  const [currentPrompt, setCurrentPrompt] = useState('What can I help with?');
+  // Time-based greeting line ("Good afternoon, Alex")
   const [greeting, setGreeting] = useState('');
-  
+
   // State for modals (kept for backward compatibility, no longer auto-opened by chat)
   const [appointmentModalOpen, setAppointmentModalOpen] = useState(false);
   const [messageModalOpen, setMessageModalOpen] = useState(false);
@@ -47,26 +90,20 @@ export default function HomeClient({ userName }: { userName?: string }) {
 
   // TTS: index of the message currently being spoken (null = nothing speaking).
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
-  
+
   // State for toast notifications
   const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
     message: '',
     type: 'info',
     visible: false,
   });
-  
+
   // Refs
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
-  // List of prompts to rotate
-  const prompts = [
-    'What can I help with?',
-    'How can I assist you today?',
-    'Ask me anything about The Tejavath',
-    'What would you like to know about Pavan?',
-    'I am here to help with your questions'
-  ];
+  const cardRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const inChat = messages.length > 0;
 
   // Decide whether to show the splash (first visit, no name yet). Runs once on mount.
   useEffect(() => {
@@ -95,18 +132,10 @@ export default function HomeClient({ userName }: { userName?: string }) {
   useEffect(() => {
     const hour = new Date().getHours();
     let newGreeting = '';
-
-    if (hour >= 5 && hour < 12) {
-      newGreeting = 'Good morning';
-    } else if (hour >= 12 && hour < 18) {
-      newGreeting = 'Good afternoon';
-    } else {
-      newGreeting = 'Good evening';
-    }
-
-    // Greet by name when we have one.
-    if (effectiveName) newGreeting += `, ${effectiveName}`;
-
+    if (hour >= 5 && hour < 12) newGreeting = 'Good morning';
+    else if (hour >= 12 && hour < 18) newGreeting = 'Good afternoon';
+    else newGreeting = 'Good evening';
+    newGreeting += `, ${effectiveName || 'there'}`;
     setGreeting(newGreeting);
   }, [effectiveName]);
 
@@ -140,63 +169,25 @@ export default function HomeClient({ userName }: { userName?: string }) {
     }
   };
 
-  // Rotate prompts every 5 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const currentIndex = prompts.indexOf(currentPrompt);
-      const nextIndex = (currentIndex + 1) % prompts.length;
-      
-      // Animate out current text and animate in new text
-      const promptElement = document.getElementById('rotating-prompt');
-      if (promptElement) {
-        promptElement.classList.add(styles.fadeOut);
-        
-        setTimeout(() => {
-          setCurrentPrompt(prompts[nextIndex]);
-          promptElement.classList.remove(styles.fadeOut);
-          promptElement.classList.add(styles.fadeIn);
-          
-          setTimeout(() => {
-            promptElement.classList.remove(styles.fadeIn);
-          }, 500);
-        }, 500);
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [currentPrompt, prompts]);
-  
   // Auto resize textarea based on content
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
-      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 120)}px`;
+      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 160)}px`;
     }
   }, [input]);
-  
+
   // Scroll to bottom of chat when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-  
-  // Show toast notification
+
   const showToast = (message: string, type: ToastType = 'info') => {
-    setToast({
-      message,
-      type,
-      visible: true,
-    });
+    setToast({ message, type, visible: true });
   };
-  
-  // Hide toast notification
-  const hideToast = () => {
-    setToast(prev => ({
-      ...prev,
-      visible: false,
-    }));
-  };
-  
-  // Core send logic — used by form submit, voice, and slot card taps
+  const hideToast = () => setToast((prev) => ({ ...prev, visible: false }));
+
+  // Core send logic — used by form submit, voice, suggestion cards, and slot taps
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
 
@@ -242,7 +233,7 @@ export default function HomeClient({ userName }: { userName?: string }) {
               setToolStatus(null);
             } else if (event.type === 'reset_text') {
               fullText = '';
-              setMessages(prev => {
+              setMessages((prev) => {
                 const updated = [...prev];
                 updated[updated.length - 1] = { role: 'assistant', content: '' };
                 return updated;
@@ -250,7 +241,7 @@ export default function HomeClient({ userName }: { userName?: string }) {
             } else if (event.type === 'token') {
               fullText += event.content;
               setStreamStarted(true);
-              setMessages(prev => {
+              setMessages((prev) => {
                 const updated = [...prev];
                 updated[updated.length - 1] = { role: 'assistant', content: fullText };
                 return updated;
@@ -266,18 +257,20 @@ export default function HomeClient({ userName }: { userName?: string }) {
               if (event.sessionMemory) setSessionMemory(event.sessionMemory);
               // TTS is opt-in per message (speaker button), not auto-played.
             } else if (event.type === 'error') {
-              setMessages(prev => {
+              setMessages((prev) => {
                 const updated = [...prev];
                 updated[updated.length - 1] = { role: 'assistant', content: event.message || 'Something went wrong. Please try again.' };
                 return updated;
               });
             }
-          } catch { /* malformed event chunk */ }
+          } catch {
+            /* malformed event chunk */
+          }
         }
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      setMessages(prev => prev.slice(0, -1));
+      setMessages((prev) => prev.slice(0, -1));
       showToast('Failed to get a response. Please try again.', 'error');
     } finally {
       setIsLoading(false);
@@ -288,16 +281,13 @@ export default function HomeClient({ userName }: { userName?: string }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await sendMessage(input);
+    const text = input;
     setInput('');
+    await sendMessage(text);
   };
 
-  // Handle voice input
-  const handleVoiceInput = (transcript: string) => {
-    sendMessage(transcript);
-  };
+  const handleVoiceInput = (transcript: string) => sendMessage(transcript);
 
-  // Handle slot card tap — auto-submits selected time
   const handleSlotSelect = (date: string, time: string) => {
     setSlotCards(null);
     sendMessage(`I'll take the ${time} slot on ${date}`);
@@ -307,7 +297,6 @@ export default function HomeClient({ userName }: { userName?: string }) {
   // another message) stops the current one — speakText() cancels ongoing speech.
   const handleSpeak = (index: number, text: string) => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
-      // If this message is already speaking, stop it.
       if (speakingIndex === index) {
         window.speechSynthesis.cancel();
         setSpeakingIndex(null);
@@ -316,11 +305,7 @@ export default function HomeClient({ userName }: { userName?: string }) {
       window.speechSynthesis.cancel();
     }
     setSpeakingIndex(index);
-    speakText(
-      text,
-      undefined,
-      () => setSpeakingIndex((cur) => (cur === index ? null : cur))
-    );
+    speakText(text, undefined, () => setSpeakingIndex((cur) => (cur === index ? null : cur)));
   };
 
   // Stop any speech if the component unmounts.
@@ -332,306 +317,250 @@ export default function HomeClient({ userName }: { userName?: string }) {
     };
   }, []);
 
+  // ── Magnetic 3D tilt on suggestion cards ──────────────
+  const handleCardMove = (idx: number) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    const el = cardRefs.current[idx];
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const x = e.clientX - r.left - r.width / 2;
+    const y = e.clientY - r.top - r.height / 2;
+    el.style.transition = 'transform 0.06s linear';
+    el.style.transform = `perspective(600px) translate3d(${x * 0.055}px, ${y * 0.08}px, 0) rotateX(${-y * 0.03}deg) rotateY(${x * 0.03}deg)`;
+  };
+  const handleCardLeave = (idx: number) => () => {
+    const el = cardRefs.current[idx];
+    if (!el) return;
+    el.style.transition = `transform 0.6s ${SPRING}`;
+    el.style.transform = 'perspective(600px) translate3d(0,0,0) rotateX(0) rotateY(0)';
+  };
+
   return (
-    <div className={styles.container}>
+    <div className={styles.shell}>
       {showSplash && <Splash onRemember={handleRemember} onSkip={handleSkip} />}
-      <header className={styles.header}>
-        <div className={styles.headerContent}>
-          <span className={styles.headerDot} />
-          Pavan's Assistant
-        </div>
-      </header>
-      
-      <main className={styles.main}>
-        <div className={messages.length === 0 ? styles.center : styles.chatWrapper}>
-          {messages.length === 0 ? (
-            <>
-              <h1 className={styles.title}>
-                <span>{greeting}</span>
-                <span id="rotating-prompt" className={styles.rotatingPrompt}>{currentPrompt}</span>
-              </h1>
-              
-              <div className={styles.buttonGrid}>
-                <button
-                  className={styles.actionButton}
-                  onClick={() => {
-                    setInput("I'd like to schedule a meeting with Pavan");
-                    setTimeout(() => {
-                      const event = { preventDefault: () => {} } as React.FormEvent;
-                      handleSubmit(event);
-                    }, 100);
-                  }}
-                >
-                  <div className={styles.buttonContent}>
-                    <div className={styles.buttonIcon}>
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M8 2V5" stroke="white" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M16 2V5" stroke="white" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M3.5 9.09H20.5" stroke="white" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M21 8.5V17C21 20 19.5 22 16 22H8C4.5 22 3 20 3 17V8.5C3 5.5 4.5 3.5 8 3.5H16C19.5 3.5 21 5.5 21 8.5Z" stroke="white" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M15.6947 13.7H15.7037" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M15.6947 16.7H15.7037" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M11.9955 13.7H12.0045" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M11.9955 16.7H12.0045" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M8.29431 13.7H8.30329" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M8.29431 16.7H8.30329" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <div className={styles.buttonTitle}>Set up appointments</div>
-                      <div className={styles.buttonDesc}>Schedule a meeting with Pavan</div>
-                    </div>
-                  </div>
-                </button>
-                
-                <button
-                  className={styles.actionButton}
-                  onClick={() => {
-                    setInput("I'd like to send a message to Pavan");
-                    setTimeout(() => {
-                      const event = { preventDefault: () => {} } as React.FormEvent;
-                      handleSubmit(event);
-                    }, 100);
-                  }}
-                >
-                  <div className={styles.buttonContent}>
-                    <div className={styles.buttonIcon}>
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M22 10V13C22 17 20 19 16 19H15.5C15.19 19 14.89 19.15 14.7 19.4L13.2 21.4C12.54 22.28 11.46 22.28 10.8 21.4L9.3 19.4C9.14 19.18 8.77 19 8.5 19H8C4 19 2 18 2 13V8C2 4 4 2 8 2H14" stroke="white" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M19.5 7C20.8807 7 22 5.88071 22 4.5C22 3.11929 20.8807 2 19.5 2C18.1193 2 17 3.11929 17 4.5C17 5.88071 18.1193 7 19.5 7Z" stroke="white" strokeWidth="1.5" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M15.9965 11H16.0054" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M11.9955 11H12.0045" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M7.99451 11H8.00349" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <div className={styles.buttonTitle}>Send a message</div>
-                      <div className={styles.buttonDesc}>Contact Pavan directly</div>
-                    </div>
-                  </div>
-                </button>
-                
-                <button 
-                  className={styles.actionButton}
-                  onClick={() => {
-                    setInput("Tell me about Pavan's services and expertise");
-                    setTimeout(() => {
-                      const event = { preventDefault: () => {} } as React.FormEvent;
-                      handleSubmit(event);
-                    }, 100);
-                  }}
-                >
-                  <div className={styles.buttonContent}>
-                    <div className={styles.buttonIcon}>
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 22C17.5 22 22 17.5 22 12C22 6.5 17.5 2 12 2C6.5 2 2 6.5 2 12C2 17.5 6.5 22 12 22Z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M12 8V13" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M11.9946 16H12.0036" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <div className={styles.buttonTitle}>Get information</div>
-                      <div className={styles.buttonDesc}>Learn about Pavan's Projects?</div>
-                    </div>
-                  </div>
-                </button>
-                
-                <button 
-                  className={styles.actionButton}
-                  onClick={() => {
-                    setInput("What topics do you know about?");
-                    setTimeout(() => {
-                      const event = { preventDefault: () => {} } as React.FormEvent;
-                      handleSubmit(event);
-                    }, 100);
-                  }}
-                >
-                  <div className={styles.buttonContent}>
-                    <div className={styles.buttonIcon}>
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M22 16.7399V4.66994C22 3.46994 21.02 2.57994 19.83 2.67994H19.77C17.67 2.85994 14.48 3.92994 12.7 5.04994L12.53 5.15994C12.24 5.33994 11.76 5.33994 11.47 5.15994L11.22 5.00994C9.44 3.89994 6.26 2.83994 4.16 2.66994C2.97 2.56994 2 3.46994 2 4.65994V16.7399C2 17.6999 2.78 18.5999 3.74 18.7199L4.03 18.7599C6.2 19.0499 9.55 20.1499 11.47 21.1999L11.51 21.2199C11.78 21.3699 12.21 21.3699 12.47 21.2199C14.39 20.1599 17.75 19.0499 19.93 18.7599L20.26 18.7199C21.22 18.5999 22 17.6999 22 16.7399Z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M12 5.48999V20.49" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M7.75 8.48999H5.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M8.5 11.49H5.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <div className={styles.buttonTitle}>Learn something</div>
-                      <div className={styles.buttonDesc}>Discover The Tejavath</div>
-                    </div>
-                  </div>
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className={styles.chatContainer}>
-              {/* Confetti overlay on booking confirmation */}
-              {showConfetti && (
-                <div className={styles.confettiOverlay} aria-hidden>
-                  {Array.from({ length: 18 }).map((_, i) => (
-                    <span key={i} className={styles.confettiPiece} style={{ '--i': i } as React.CSSProperties} />
-                  ))}
-                </div>
-              )}
 
-              {messages.map((message, index) => {
-                const isUser = message.role === 'user';
-                const isLastAssistant = index === messages.length - 1 && !isUser;
-                const isStreaming = isLastAssistant && isLoading && streamStarted;
-                const isThinking = isLastAssistant && isLoading && !streamStarted && !toolStatus;
-                const hasToolStatus = isLastAssistant && isLoading && !!toolStatus;
-                // Skip empty non-loading assistant messages
-                if (!isUser && !message.content && !isLastAssistant) return null;
-                return (
-                  <div key={index} className={`${styles.messageRow} ${isUser ? styles.userRow : styles.assistantRow}`}>
-                    <div className={styles.messageInner}>
-                      {!isUser && <div className={styles.aiAvatar}>P</div>}
-                      <div className={isUser ? styles.userBody : styles.assistantBody}>
-                        {isUser ? (
-                          message.content
-                        ) : isThinking ? (
-                          <div className={styles.thinkingPill}>
-                            <span className={styles.thinkingLabel}>Thinking</span>
-                            <span className={styles.statusDots}><span/><span/><span/></span>
-                          </div>
-                        ) : hasToolStatus ? (
-                          <div className={styles.toolStatus}>
-                            <span className={styles.toolStatusIcon}>{toolStatus!.icon}</span>
-                            <span className={styles.toolStatusLabel}>{toolStatus!.label}</span>
-                            <span className={styles.statusDots}><span/><span/><span/></span>
-                          </div>
-                        ) : (
-                          <div className={isStreaming ? styles.streamingText : ''}>
-                            <ReactMarkdown>{message.content}</ReactMarkdown>
-                            {/* Speaker: read this message aloud on demand (not while streaming) */}
-                            {!isStreaming && message.content && (
-                              <button
-                                type="button"
-                                className={`${styles.speakBtn} ${speakingIndex === index ? styles.speakBtnActive : ''}`}
-                                onClick={() => handleSpeak(index, message.content)}
-                                aria-label={speakingIndex === index ? 'Stop reading' : 'Read aloud'}
-                                title={speakingIndex === index ? 'Stop' : 'Read aloud'}
-                              >
-                                {speakingIndex === index ? (
-                                  // stop icon
-                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/>
-                                  </svg>
-                                ) : (
-                                  // speaker icon
-                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M3 10v4a1 1 0 0 0 1 1h3l4 4V5L7 9H4a1 1 0 0 0-1 1Z" fill="currentColor"/>
-                                    <path d="M15.5 8.5a4 4 0 0 1 0 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-                                    <path d="M18 6a7 7 0 0 1 0 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-                                  </svg>
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+      <div className={styles.gridBg} aria-hidden />
 
-              {/* Tappable slot cards */}
-              {slotCards && !isLoading && (
-                <div className={styles.assistantRow}>
-                  <div className={styles.messageInner}>
-                    <div className={styles.aiAvatarSpacer} />
-                    <div className={styles.slotCardsSection}>
-                      <p className={styles.slotCardsLabel}>Pick a slot for {slotCards.date}:</p>
-                      <div className={styles.slotCardsRow}>
-                        {slotCards.slots.slice(0, 9).map((slot) => (
-                          <button
-                            key={slot.time}
-                            className={styles.slotCard}
-                            onClick={() => handleSlotSelect(slotCards.date, slot.time)}
-                          >
-                            {slot.time} <span className={styles.slotCardIST}>IST</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Booking confirmation card */}
-              {bookingCard && (
-                <div className={styles.assistantRow}>
-                  <div className={styles.messageInner}>
-                    <div className={styles.aiAvatarSpacer} />
-                    <div className={styles.bookingCard}>
-                      <div className={styles.bookingCardHeader}>
-                        <span className={styles.bookingCardCheck}>✓</span> Booking Confirmed
-                      </div>
-                      <div className={styles.bookingCardRow}><span>📅</span>{bookingCard.date} · {bookingCard.time} IST</div>
-                      <div className={styles.bookingCardRow}><span>👤</span>{bookingCard.name}</div>
-                      <div className={styles.bookingCardRow}><span>📧</span>{bookingCard.email}</div>
-                      {bookingCard.eventLink && (
-                        <a href={bookingCard.eventLink} target="_blank" rel="noreferrer" className={styles.bookingCardLink}>
-                          Open in Google Calendar →
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-          
-          <div className={styles.inputContainer}>
-            <form onSubmit={handleSubmit}>
-              <div className={styles.inputWrapper}>
-                <textarea 
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask anything"
-                  className={styles.inputField}
-                  rows={1}
-                  disabled={isLoading}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSubmit(e);
-                    }
-                  }}
-                />
-                <div className={styles.inputActions}>
-                  <VoiceButton 
-                    onTextCaptured={handleVoiceInput} 
-                    disabled={isLoading}
-                  />
-                  <button 
-                    type="submit" 
-                    className={`${styles.sendButton} ${input.trim() ? styles.sendButtonActive : ''}`} 
-                    disabled={!input.trim() || isLoading}
-                    aria-label="Send message"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M7.39999 6.32003L15.89 3.49003C19.7 2.22003 21.77 4.30003 20.51 8.11003L17.68 16.6C15.78 22.31 12.66 22.31 10.76 16.6L9.91999 14.08L7.39999 13.24C1.68999 11.34 1.68999 8.23003 7.39999 6.32003Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M10.11 13.6501L13.69 10.0601" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </form>
+      {/* Marquee wordmark behind the chat */}
+      {inChat && (
+        <div className={styles.marquee} aria-hidden>
+          <div className={styles.marqueeTrack}>
+            THE&nbsp;TEJAVATH&nbsp;&nbsp;·&nbsp;&nbsp;THE&nbsp;TEJAVATH&nbsp;&nbsp;·&nbsp;&nbsp;THE&nbsp;TEJAVATH&nbsp;&nbsp;·&nbsp;&nbsp;THE&nbsp;TEJAVATH&nbsp;&nbsp;·&nbsp;&nbsp;
           </div>
         </div>
-        
-        <footer className={styles.footer}>
-          I am The Tejavath's Assistant. I can't make any mistakes! ;)
-          Developed by Pavan Tejavath.
-        </footer>
-      </main>
-      
+      )}
+
+      {/* ── Meta bar ─────────────────────────────────── */}
+      <div className={styles.metaBar}>
+        {inChat ? (
+          <>
+            <button
+              className={styles.backBtn}
+              onClick={() => setMessages([])}
+              aria-label="Back"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+            <div style={{ width: 32 }} />
+          </>
+        ) : (
+          <>
+            <div className={styles.metaLeft}>
+              <span className={styles.mark}><Flame size={15} /></span>
+              <span>PAVAN&apos;S ASSISTANT</span>
+            </div>
+            <div className={styles.metaRight}>
+              <span className={styles.onlineDot} />
+              <span>ONLINE</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Home screen (no messages yet) ────────────── */}
+      {!inChat ? (
+        <div className={styles.homeCenter}>
+          <div className={styles.homeHead}>
+            <div className={styles.indexLabel}>
+              <span className={styles.indexRule} />
+              02 / SESSION
+            </div>
+            <div className={styles.greetingLine}>{greeting}</div>
+            <div className={styles.homeHeadline}>
+              I am here to help<br />with your questions
+            </div>
+          </div>
+
+          <div className={styles.cardGrid}>
+            {SUGGESTIONS.map((card, i) => (
+              <button
+                key={card.id}
+                ref={(el) => { cardRefs.current[i] = el; }}
+                className={styles.suggestionCard}
+                onMouseMove={handleCardMove(i)}
+                onMouseLeave={handleCardLeave(i)}
+                onClick={() => sendMessage(card.prompt)}
+              >
+                <span className={styles.cardIcon}>{card.icon}</span>
+                <span className={styles.cardText}>
+                  <span className={styles.cardTitle}>{card.title}</span>
+                  <span className={styles.cardSubtitle}>{card.subtitle}</span>
+                </span>
+                <span className={styles.cardArrow}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17 17 7M8 7h9v9" /></svg>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* ── Chat screen ──────────────────────────────── */
+        <div className={styles.messages}>
+          {showConfetti && (
+            <div className={styles.confettiOverlay} aria-hidden>
+              {Array.from({ length: 18 }).map((_, i) => (
+                <span key={i} className={styles.confettiPiece} style={{ '--i': i } as React.CSSProperties} />
+              ))}
+            </div>
+          )}
+
+          {messages.map((message, index) => {
+            const isUser = message.role === 'user';
+            const isLastAssistant = index === messages.length - 1 && !isUser;
+            const isStreaming = isLastAssistant && isLoading && streamStarted;
+            const isThinking = isLastAssistant && isLoading && !streamStarted && !toolStatus;
+            const hasToolStatus = isLastAssistant && isLoading && !!toolStatus;
+            if (!isUser && !message.content && !isLastAssistant) return null;
+
+            if (isThinking || hasToolStatus) {
+              return (
+                <div key={index} className={styles.assistantRow}>
+                  <div className={styles.avatar}><Flame size={17} /></div>
+                  <div className={styles.thinkingPill}>
+                    {hasToolStatus && <span className={styles.toolIcon}>{toolStatus!.icon}</span>}
+                    {hasToolStatus && <span className={styles.toolLabel}>{toolStatus!.label}</span>}
+                    <span className={styles.dots}><span /><span /><span /></span>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={index} className={isUser ? styles.userRow : styles.assistantRow}>
+                {!isUser && <div className={styles.avatar}><Flame size={17} /></div>}
+                <div className={isUser ? styles.userBubble : styles.assistantBubble}>
+                  {isUser ? (
+                    message.content
+                  ) : (
+                    <div className={isStreaming ? styles.streamingText : ''}>
+                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                      {!isStreaming && message.content && (
+                        <button
+                          type="button"
+                          className={`${styles.speakBtn} ${speakingIndex === index ? styles.speakBtnActive : ''}`}
+                          onClick={() => handleSpeak(index, message.content)}
+                          aria-label={speakingIndex === index ? 'Stop reading' : 'Read aloud'}
+                          title={speakingIndex === index ? 'Stop' : 'Read aloud'}
+                        >
+                          {speakingIndex === index ? (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" /></svg>
+                          ) : (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                              <path d="M3 10v4a1 1 0 0 0 1 1h3l4 4V5L7 9H4a1 1 0 0 0-1 1Z" fill="currentColor" />
+                              <path d="M15.5 8.5a4 4 0 0 1 0 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                              <path d="M18 6a7 7 0 0 1 0 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Tappable slot cards */}
+          {slotCards && !isLoading && (
+            <div className={styles.assistantRow}>
+              <div className={styles.avatarSpacer} />
+              <div className={styles.slotSection}>
+                <p className={styles.slotLabel}>Pick a slot for {slotCards.date}:</p>
+                <div className={styles.slotRow}>
+                  {slotCards.slots.slice(0, 9).map((slot) => (
+                    <button key={slot.time} className={styles.slotCard} onClick={() => handleSlotSelect(slotCards.date, slot.time)}>
+                      {slot.time} <span className={styles.slotIST}>IST</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Booking confirmation card */}
+          {bookingCard && (
+            <div className={styles.assistantRow}>
+              <div className={styles.avatarSpacer} />
+              <div className={styles.bookingCard}>
+                <div className={styles.bookingHeader}>
+                  <span className={styles.bookingCheck}>✓</span> Booking Confirmed
+                </div>
+                <div className={styles.bookingRow}><span>📅</span>{bookingCard.date} · {bookingCard.time} IST</div>
+                <div className={styles.bookingRow}><span>👤</span>{bookingCard.name}</div>
+                <div className={styles.bookingRow}><span>📧</span>{bookingCard.email}</div>
+                {bookingCard.eventLink && (
+                  <a href={bookingCard.eventLink} target="_blank" rel="noreferrer" className={styles.bookingLink}>
+                    Open in Google Calendar →
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+      )}
+
+      {/* ── Input bar ────────────────────────────────── */}
+      <div className={styles.inputBarWrap}>
+        <form onSubmit={handleSubmit}>
+          <div className={`${styles.inputBar} ${inputFocused ? styles.inputBarFocused : ''}`}>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              placeholder="Ask anything"
+              className={styles.textarea}
+              rows={1}
+              disabled={isLoading}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
+            />
+            <div className={styles.micWrap}>
+              <VoiceButton onTextCaptured={handleVoiceInput} disabled={isLoading} />
+            </div>
+            <button
+              type="submit"
+              className={`${styles.sendBtn} ${input.trim() ? styles.sendBtnActive : ''}`}
+              disabled={!input.trim() || isLoading}
+              aria-label="Send message"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 11.5 21 3l-6.5 18-3.2-8.3L3 11.5Z" /></svg>
+            </button>
+          </div>
+        </form>
+        <div className={styles.disclaimer}>
+          I AM THE TEJAVATH&apos;S ASSISTANT · CAN&apos;T MAKE ANY MISTAKES ;) · DEVELOPED BY PAVAN TEJAVATH
+        </div>
+      </div>
+
       {/* Modals */}
-      <AppointmentModal 
+      <AppointmentModal
         isOpen={appointmentModalOpen}
         onClose={() => setAppointmentModalOpen(false)}
         onSuccess={(message) => {
@@ -639,7 +568,6 @@ export default function HomeClient({ userName }: { userName?: string }) {
           showToast(message, 'success');
         }}
       />
-      
       <MessageModal
         isOpen={messageModalOpen}
         onClose={() => setMessageModalOpen(false)}
@@ -648,14 +576,7 @@ export default function HomeClient({ userName }: { userName?: string }) {
           showToast(message, 'success');
         }}
       />
-      
-      {/* Toast notifications */}
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        isVisible={toast.visible}
-        onClose={hideToast}
-      />
+      <Toast message={toast.message} type={toast.type} isVisible={toast.visible} onClose={hideToast} />
     </div>
   );
 }

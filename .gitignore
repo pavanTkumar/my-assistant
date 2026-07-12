@@ -42,3 +42,7 @@ next-env.d.ts
 
 # claude code local settings
 .claude/
+
+# Design source import (not part of the app)
+/Virtual assistant UI redesign/
+/Screenshot*.png
