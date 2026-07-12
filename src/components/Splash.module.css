@@ -1,0 +1,174 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(120% 120% at 50% 0%, #17211d 0%, #0f0f0f 55%);
+  overflow: hidden;
+  animation: overlayIn 0.5s ease both;
+}
+
+.overlay.leaving {
+  animation: overlayOut 0.4s ease forwards;
+}
+
+/* ── Floating orbs (placeholder physics) ─────────────────── */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(48px);
+  opacity: 0.55;
+  will-change: transform;
+}
+.orb1 {
+  width: 340px; height: 340px;
+  background: radial-gradient(circle, #10a37f 0%, transparent 70%);
+  top: -60px; left: -40px;
+  animation: drift1 14s ease-in-out infinite;
+}
+.orb2 {
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, #1a73e8 0%, transparent 70%);
+  bottom: -80px; right: -40px;
+  animation: drift2 18s ease-in-out infinite;
+}
+.orb3 {
+  width: 220px; height: 220px;
+  background: radial-gradient(circle, #10a37f 0%, transparent 70%);
+  bottom: 20%; left: 12%;
+  opacity: 0.35;
+  animation: drift3 22s ease-in-out infinite;
+}
+
+/* ── Card ────────────────────────────────────────────────── */
+.card {
+  position: relative;
+  z-index: 1;
+  width: min(92vw, 400px);
+  padding: 40px 32px 26px;
+  text-align: center;
+  background: rgba(33, 33, 33, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  animation: cardIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+.badge {
+  width: 56px; height: 56px;
+  margin: 0 auto 18px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 20px; color: #fff;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #10a37f 0%, #1a73e8 100%);
+  box-shadow: 0 8px 24px rgba(16, 163, 127, 0.35);
+  animation: pop 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+}
+
+.heading {
+  font-size: 26px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.sub {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 22px;
+  line-height: 1.4;
+}
+
+.input {
+  width: 100%;
+  padding: 13px 16px;
+  font-size: 16px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  outline: none;
+  transition: border-color 0.18s, background 0.18s;
+  margin-bottom: 14px;
+}
+.input::placeholder { color: rgba(255, 255, 255, 0.35); }
+.input:focus {
+  border-color: #10a37f;
+  background: rgba(16, 163, 127, 0.08);
+}
+
+.primary {
+  width: 100%;
+  padding: 13px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #10a37f 0%, #1a73e8 100%);
+  transition: transform 0.14s, box-shadow 0.18s, opacity 0.18s;
+}
+.primary:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(16, 163, 127, 0.3); }
+.primary:active { transform: translateY(0); }
+
+.ghost {
+  width: 100%;
+  padding: 11px;
+  margin-top: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.ghost:hover { color: rgba(255, 255, 255, 0.85); }
+
+.consent {
+  margin-top: 18px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+/* ── Motion ──────────────────────────────────────────────── */
+@keyframes overlayIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes overlayOut { from { opacity: 1; } to { opacity: 0; visibility: hidden; } }
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(22px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes pop {
+  0%   { opacity: 0; transform: scale(0.6); }
+  70%  { transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes drift1 {
+  0%,100% { transform: translate(0, 0); }
+  50%     { transform: translate(40px, 30px); }
+}
+@keyframes drift2 {
+  0%,100% { transform: translate(0, 0); }
+  50%     { transform: translate(-36px, -28px); }
+}
+@keyframes drift3 {
+  0%,100% { transform: translate(0, 0); }
+  50%     { transform: translate(24px, -34px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay, .card, .badge, .orb1, .orb2, .orb3 { animation: none; }
+}
+
+@media (max-width: 600px) {
+  .card { padding: 34px 24px 22px; }
+  .heading { font-size: 23px; }
+}

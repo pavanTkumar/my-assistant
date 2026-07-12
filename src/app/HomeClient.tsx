@@ -7,14 +7,23 @@ import AppointmentModal from '@/components/AppointmentModal';
 import MessageModal from '@/components/MessageModal';
 import Toast, { ToastType } from '@/components/Toast';
 import VoiceButton from '@/components/VoiceButton';
+import Splash from '@/components/Splash';
 import { speakText } from '@/lib/speech';
+
+const ONBOARDED_KEY = 'myai_onboarded'; // localStorage: user has seen the splash
+const SESSION_NAME_KEY = 'myai_name';   // sessionStorage: session-only (declined) name
 
 export default function HomeClient({ userName }: { userName?: string }) {
   // State for input and chat
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
-  
+
+  // Effective display name: server-persisted (userName) → session-only → none.
+  const [effectiveName, setEffectiveName] = useState<string | undefined>(userName);
+  // Splash decides on the client (needs localStorage/sessionStorage), so start hidden.
+  const [showSplash, setShowSplash] = useState(false);
+
   // State for rotating prompts
   const [currentPrompt, setCurrentPrompt] = useState('What can I help with?');
   const [greeting, setGreeting] = useState('');
@@ -56,11 +65,34 @@ export default function HomeClient({ userName }: { userName?: string }) {
     'I am here to help with your questions'
   ];
 
-  // Set time-based greeting
+  // Decide whether to show the splash (first visit, no name yet). Runs once on mount.
+  useEffect(() => {
+    try {
+      // If the server already knows the visitor's name, no splash — they're onboarded.
+      if (userName) {
+        localStorage.setItem(ONBOARDED_KEY, '1');
+        return;
+      }
+      // Pick up a session-only name chosen earlier this session (declined-cookie path).
+      const sessionName = sessionStorage.getItem(SESSION_NAME_KEY) || undefined;
+      if (sessionName) {
+        setEffectiveName(sessionName);
+        return;
+      }
+      // First time and no name anywhere → show the splash.
+      if (!localStorage.getItem(ONBOARDED_KEY)) {
+        setShowSplash(true);
+      }
+    } catch {
+      // storage blocked (private mode) — just skip the splash gracefully.
+    }
+  }, [userName]);
+
+  // Set time-based greeting (uses the effective name from splash / server / session).
   useEffect(() => {
     const hour = new Date().getHours();
     let newGreeting = '';
-    
+
     if (hour >= 5 && hour < 12) {
       newGreeting = 'Good morning';
     } else if (hour >= 12 && hour < 18) {
@@ -69,11 +101,41 @@ export default function HomeClient({ userName }: { userName?: string }) {
       newGreeting = 'Good evening';
     }
 
-    // Greet returning visitors by name.
-    if (userName) newGreeting += `, ${userName}`;
+    // Greet by name when we have one.
+    if (effectiveName) newGreeting += `, ${effectiveName}`;
 
     setGreeting(newGreeting);
-  }, [userName]);
+  }, [effectiveName]);
+
+  // Splash: "Continue" → persist name to Redis (cookie already set by middleware).
+  const handleRemember = async (name: string) => {
+    setEffectiveName(name);
+    setShowSplash(false);
+    try {
+      localStorage.setItem(ONBOARDED_KEY, '1');
+      await fetch('/api/session/name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+    } catch {
+      /* best-effort; greeting still works this visit */
+    }
+  };
+
+  // Splash: "Skip" → session-only. Keep the name for this tab, never persist.
+  const handleSkip = (name?: string) => {
+    setShowSplash(false);
+    try {
+      localStorage.setItem(ONBOARDED_KEY, '1');
+      if (name) {
+        sessionStorage.setItem(SESSION_NAME_KEY, name);
+        setEffectiveName(name);
+      }
+    } catch {
+      if (name) setEffectiveName(name);
+    }
+  };
 
   // Rotate prompts every 5 seconds
   useEffect(() => {
@@ -240,6 +302,7 @@ export default function HomeClient({ userName }: { userName?: string }) {
   
   return (
     <div className={styles.container}>
+      {showSplash && <Splash onRemember={handleRemember} onSkip={handleSkip} />}
       <header className={styles.header}>
         <div className={styles.headerContent}>
           <span className={styles.headerDot} />

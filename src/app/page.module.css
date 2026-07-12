@@ -74,9 +74,10 @@
 }
 
 .title span:first-child {
-  font-size: 14px;
-  font-weight: 400;
-  color: rgba(255,255,255,0.4);
+  font-size: 22px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.7);
+  margin-bottom: 2px;
 }
 
 .rotatingPrompt { transition: opacity 0.4s, transform 0.4s; }
@@ -461,6 +462,7 @@
 @media (max-width: 600px) {
   .buttonGrid   { grid-template-columns: 1fr; }
   .title        { font-size: 21px; }
+  .title span:first-child { font-size: 18px; }
   .messageInner { padding: 0 14px; gap: 10px; }
   .assistantBody, .userBody { font-size: 14px; }
   .inputContainer { padding: 6px 12px 14px; }
