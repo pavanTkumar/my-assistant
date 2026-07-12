@@ -2,7 +2,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { addDocument } from '@/lib/pinecone';
-import { OpenAIEmbeddings } from '@langchain/openai';
 
 export async function POST(request: NextRequest) {
   try {

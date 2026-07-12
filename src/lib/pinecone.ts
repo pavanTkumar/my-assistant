@@ -1,7 +1,13 @@
 import { Pinecone, Index } from '@pinecone-database/pinecone';
-import { Document } from '@langchain/core/documents';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
+
+// Minimal document shape returned by similaritySearch (previously @langchain/core's Document).
+// Embeddings are generated via a raw Gemini REST call below — no LangChain/Google SDK needed.
+type Document = {
+  pageContent: string;
+  metadata: Record<string, any>;
+  score?: number;
+};
 
 // Gemini embedding helper — gemini-embedding-001 @ 768 dims (free, no OpenAI credits)
 const getEmbedding = async (text: string): Promise<number[]> => {
@@ -39,63 +45,65 @@ export const getPineconeIndex = async (): Promise<Index> => {
   return pinecone.index(process.env.PINECONE_INDEX || '');
 };
 
-// Add document to vector database
+// Add document to vector database.
+// Pass `id` for a deterministic (idempotent) upsert; otherwise a random id is used.
+// Pass `namespace` to isolate content (e.g. 'activity-log' for daily life-events).
 export const addDocument = async (
   text: string,
-  metadata: Record<string, any> = {}
+  metadata: Record<string, any> = {},
+  opts: { id?: string; namespace?: string } = {}
 ): Promise<number> => {
   try {
     const index = await getPineconeIndex();
-    // Generate embedding for the text
     const embeddingValues = await getEmbedding(text);
-    const embedding = [embeddingValues];
-    
-    // Create a unique ID for the document
-    const id = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    
-    // Upsert the document to Pinecone
-    await index.upsert([
+
+    const id =
+      opts.id || `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    const target = opts.namespace ? index.namespace(opts.namespace) : index;
+
+    await target.upsert([
       {
         id,
-        values: embedding[0],
+        values: embeddingValues,
         metadata: {
           ...metadata,
           text,
         },
       },
     ]);
-    
-    return 1; // Return the number of chunks inserted
+
+    return 1; // number of vectors upserted
   } catch (error) {
     console.error('Error adding document to vector store:', error);
     throw error;
   }
 };
 
-// Search for similar documents
+// Search for similar documents. Optionally scope to a namespace and/or filter by metadata.
+// Returns pageContent + metadata + relevance score (Pinecone cosine similarity).
 export const similaritySearch = async (
   query: string,
-  k: number = 3
+  k: number = 3,
+  opts: { namespace?: string; filter?: Record<string, any> } = {}
 ): Promise<Document[]> => {
   try {
     const index = await getPineconeIndex();
-    // Generate embedding for the query
     const embedding = await getEmbedding(query);
-    
-    // Query Pinecone
-    const results = await index.query({
+    const target = opts.namespace ? index.namespace(opts.namespace) : index;
+
+    const results = await target.query({
       vector: embedding,
       topK: k,
       includeMetadata: true,
+      ...(opts.filter ? { filter: opts.filter } : {}),
     });
-    
-    // Convert Pinecone results to LangChain Document format
-    return results.matches.map((match) => {
-      return {
-        pageContent: match.metadata?.text as string || '',
-        metadata: { ...match.metadata },
-      };
-    });
+
+    return results.matches.map((match) => ({
+      pageContent: (match.metadata?.text as string) || '',
+      metadata: { ...match.metadata },
+      score: match.score,
+    }));
   } catch (error) {
     console.error('Error searching vector store:', error);
     return [];

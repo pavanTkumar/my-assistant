@@ -5,6 +5,12 @@
     "installCommand": "npm install --legacy-peer-deps",
     "framework": "nextjs",
     "outputDirectory": ".next",
+    "crons": [
+      {
+        "path": "/api/cron/nudge",
+        "schedule": "30 14 * * *"
+      }
+    ],
     "headers": [
       {
         "source": "/api/(.*)",
