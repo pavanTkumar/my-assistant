@@ -190,6 +190,31 @@
 .assistantBody :global(p)            { margin: 0 0 0.5em; }
 .assistantBody :global(p:last-child) { margin-bottom: 0; }
 .assistantBody :global(strong)       { font-weight: 600; color: white; }
+
+/* Per-message "read aloud" speaker button */
+.speakBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.speakBtn:hover {
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.07);
+}
+.speakBtnActive {
+  color: #10a37f;
+  background: rgba(16, 163, 127, 0.12);
+}
 .assistantBody :global(ul),
 .assistantBody :global(ol)           { margin: 0.3em 0 0.5em 1.2em; padding: 0; }
 .assistantBody :global(li)           { margin-bottom: 0.2em; }

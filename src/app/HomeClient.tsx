@@ -44,6 +44,9 @@ export default function HomeClient({ userName }: { userName?: string }) {
   const [slotCards, setSlotCards] = useState<{ date: string; slots: { time: string }[] } | null>(null);
   const [bookingCard, setBookingCard] = useState<{ name: string; email: string; date: string; time: string; eventLink?: string } | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
+
+  // TTS: index of the message currently being spoken (null = nothing speaking).
+  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   
   // State for toast notifications
   const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
@@ -261,7 +264,7 @@ export default function HomeClient({ userName }: { userName?: string }) {
             } else if (event.type === 'done') {
               setToolStatus(null);
               if (event.sessionMemory) setSessionMemory(event.sessionMemory);
-              speakText(fullText);
+              // TTS is opt-in per message (speaker button), not auto-played.
             } else if (event.type === 'error') {
               setMessages(prev => {
                 const updated = [...prev];
@@ -299,7 +302,36 @@ export default function HomeClient({ userName }: { userName?: string }) {
     setSlotCards(null);
     sendMessage(`I'll take the ${time} slot on ${date}`);
   };
-  
+
+  // Read a single assistant message aloud on demand. Clicking again (or clicking
+  // another message) stops the current one — speakText() cancels ongoing speech.
+  const handleSpeak = (index: number, text: string) => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      // If this message is already speaking, stop it.
+      if (speakingIndex === index) {
+        window.speechSynthesis.cancel();
+        setSpeakingIndex(null);
+        return;
+      }
+      window.speechSynthesis.cancel();
+    }
+    setSpeakingIndex(index);
+    speakText(
+      text,
+      undefined,
+      () => setSpeakingIndex((cur) => (cur === index ? null : cur))
+    );
+  };
+
+  // Stop any speech if the component unmounts.
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   return (
     <div className={styles.container}>
       {showSplash && <Splash onRemember={handleRemember} onSkip={handleSkip} />}
@@ -471,6 +503,30 @@ export default function HomeClient({ userName }: { userName?: string }) {
                         ) : (
                           <div className={isStreaming ? styles.streamingText : ''}>
                             <ReactMarkdown>{message.content}</ReactMarkdown>
+                            {/* Speaker: read this message aloud on demand (not while streaming) */}
+                            {!isStreaming && message.content && (
+                              <button
+                                type="button"
+                                className={`${styles.speakBtn} ${speakingIndex === index ? styles.speakBtnActive : ''}`}
+                                onClick={() => handleSpeak(index, message.content)}
+                                aria-label={speakingIndex === index ? 'Stop reading' : 'Read aloud'}
+                                title={speakingIndex === index ? 'Stop' : 'Read aloud'}
+                              >
+                                {speakingIndex === index ? (
+                                  // stop icon
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/>
+                                  </svg>
+                                ) : (
+                                  // speaker icon
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3 10v4a1 1 0 0 0 1 1h3l4 4V5L7 9H4a1 1 0 0 0-1 1Z" fill="currentColor"/>
+                                    <path d="M15.5 8.5a4 4 0 0 1 0 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                                    <path d="M18 6a7 7 0 0 1 0 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                                  </svg>
+                                )}
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
