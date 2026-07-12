@@ -1,4 +1,7 @@
 export const dynamic = 'force-dynamic';
+// Streaming agent: retrieval + one or more LLM turns + tool calls. Allow headroom
+// beyond Vercel's default 10s so a multi-step booking flow never gets cut off.
+export const maxDuration = 60;
 
 import { NextRequest } from 'next/server';
 import OpenAI from 'openai';

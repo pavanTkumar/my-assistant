@@ -1,4 +1,8 @@
 export const dynamic = 'force-dynamic';
+// The webhook runs an LLM classification + embedding + Pinecone round-trip before
+// replying. Vercel's default 10s function limit can 504 on a cold start (Telegram
+// then reports "Wrong response from the webhook: 504 Gateway Timeout"). Give it room.
+export const maxDuration = 30;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedis } from '@/lib/session';
