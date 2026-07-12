@@ -6,6 +6,7 @@ export const maxDuration = 60;
 import { NextRequest } from 'next/server';
 import OpenAI from 'openai';
 import { similaritySearch } from '@/lib/pinecone';
+import { ACTIVITY_NAMESPACE } from '@/lib/activityLog';
 import { getAvailableSlots, bookAppointment } from '@/lib/googleCalendar';
 import { sendTelegramMessage, formatBookingNotification, formatContactNotification } from '@/lib/telegram';
 import { env } from '@/lib/env';
@@ -111,7 +112,7 @@ const isPastDate = (date: string): boolean => {
 
 // ─── System prompt ───────────────────────────────────────────────────────────
 
-const getSystemPrompt = (ragContext: string): string => {
+const getSystemPrompt = (ragContext: string, activityContext: string = ''): string => {
   const now = new Date();
   const istDate = new Intl.DateTimeFormat('en-IN', {
     timeZone: 'Asia/Kolkata',
@@ -151,10 +152,19 @@ Match their language, formality, and energy. Keep your own personality — frien
 RETRIEVED CONTEXT ABOUT PAVAN (your only source of truth about him):
 ${ragContext || '(no specific context retrieved for this message)'}
 
+PAVAN'S RECENT ACTIVITY (from his own daily logs; each line is [date](category) summary):
+${activityContext || '(no recent activity logs matched this question)'}
+
 ANSWERING ABOUT PAVAN
 - Answer from the retrieved context above, in third person. If it's not there, say you don't have that detail rather than inventing it — offer to pass the question to Pavan instead.
 - Be conversational, not robotic. 1–3 sentences usually; expand only if genuinely asked. At most one follow-up question per turn.
 - You're his receptionist, not a general chatbot. For anything off-topic, follow the SCOPE rule above: decline in one line and steer back — do NOT answer the off-topic question even partially.
+
+ANSWERING "WHAT IS PAVAN DOING / DID TODAY / lately"
+- Use the RECENT ACTIVITY block above. Compare each entry's [date] to TODAY (at the top) to judge "today", "yesterday", "this week", "lately".
+- If activity matches, share it naturally and warmly ("He spent today working on his AI assistant"). Apply the SAME privacy tiers below: professional/work activity → share freely; personal-category logs (health, relationships, private outings) → stay vague or deflect, never spill specifics.
+- If the activity block is empty or nothing matches the timeframe asked, say you don't have a rundown for that period and offer to ping him or pass a message — don't invent activity.
+- Never expose the raw [date](category) tags to the visitor; they're just for your reasoning. Speak in plain, human language.
 
 PRIVACY — you're his PERSONAL assistant, so you may know personal things; the skill is how you handle them
 You are Pavan's personal assistant, not a generic receptionist. You often DO know personal details (they may appear in the retrieved context). Handle them in three tiers:
@@ -290,18 +300,44 @@ const executeTool = async (
   }
 };
 
-// ─── Retrieval: embed the latest user message, pull top-k public context ─────
+// ─── Retrieval: embed the latest user message, pull top-k context ────────────
+// Queries two namespaces: the public bio (default) and the daily activity-log.
+// Activity is returned as a separate block so the prompt can apply recency +
+// privacy redaction to it (see ACTIVITY section in the system prompt).
 
-const retrieveContext = async (userText: string): Promise<string> => {
-  if (!userText.trim()) return '';
-  try {
-    const docs = await similaritySearch(userText, RAG_TOP_K);
-    const relevant = docs.filter((d) => (d.score ?? 0) >= RAG_MIN_SCORE && d.pageContent.trim());
-    return relevant.map((d) => d.pageContent).join('\n\n---\n\n');
-  } catch (e: any) {
-    console.error('RAG retrieval failed:', e?.message);
-    return '';
-  }
+type RetrievedContext = { bio: string; activity: string };
+
+const retrieveContext = async (userText: string): Promise<RetrievedContext> => {
+  if (!userText.trim()) return { bio: '', activity: '' };
+
+  const [bioDocs, activityDocs] = await Promise.all([
+    similaritySearch(userText, RAG_TOP_K).catch((e: any) => {
+      console.error('bio retrieval failed:', e?.message);
+      return [];
+    }),
+    similaritySearch(userText, RAG_TOP_K, { namespace: ACTIVITY_NAMESPACE }).catch((e: any) => {
+      console.error('activity retrieval failed:', e?.message);
+      return [];
+    }),
+  ]);
+
+  const bio = bioDocs
+    .filter((d) => (d.score ?? 0) >= RAG_MIN_SCORE && d.pageContent.trim())
+    .map((d) => d.pageContent)
+    .join('\n\n---\n\n');
+
+  const activity = activityDocs
+    .filter((d) => (d.score ?? 0) >= RAG_MIN_SCORE && d.pageContent.trim())
+    // Tag each activity entry with its date + category so the model can reason
+    // about recency ("today") and apply the right privacy tier.
+    .map((d) => {
+      const date = d.metadata?.date ? `[${d.metadata.date}]` : '';
+      const cat = d.metadata?.category ? `(${d.metadata.category})` : '';
+      return `${date}${cat} ${d.pageContent}`.trim();
+    })
+    .join('\n');
+
+  return { bio, activity };
 };
 
 // ─── Streaming agent loop (OpenAI) ───────────────────────────────────────────
@@ -314,9 +350,9 @@ async function runStreamingAgent(
 ): Promise<void> {
   // Retrieve-then-generate: always inject fresh RAG context for the latest user turn.
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-  const ragContext = await retrieveContext(lastUser?.content || '');
+  const { bio, activity } = await retrieveContext(lastUser?.content || '');
 
-  let systemPrompt = getSystemPrompt(ragContext);
+  let systemPrompt = getSystemPrompt(bio, activity);
   if (sessionMemory) {
     systemPrompt += `\n\nSESSION CONTEXT: ${sessionMemory.type === 'booking'
       ? `The visitor already booked a meeting on ${sessionMemory.date} at ${sessionMemory.time} IST as ${sessionMemory.name} (${sessionMemory.email}).`
