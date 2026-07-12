@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { createHash } from 'crypto';
 import { addDocument, similaritySearch, deleteDocument } from '@/lib/pinecone';
-import { logActivity } from '@/lib/activityLog';
+import { logActivity, logActivityFromSummary } from '@/lib/activityLog';
 import { getRedis } from '@/lib/session';
 import { env } from '@/lib/env';
 
@@ -136,10 +136,10 @@ export async function handleKbMessage(rawText: string): Promise<string> {
 
   switch (intent) {
     case 'log': {
-      const entry = await logActivity(text);
-      return `📝 *Logged* (${entry.category})\n${entry.summary}${
-        entry.entities.length ? `\n_${entry.entities.join(', ')}_` : ''
-      }`;
+      // The classifier already produced a clean third-person summary, so skip the
+      // second structuring LLM call — just embed + upsert (one round-trip, ~3x faster).
+      const entry = await logActivityFromSummary(content);
+      return `📝 *Logged*\n${entry.summary}`;
     }
 
     case 'add': {

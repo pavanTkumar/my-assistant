@@ -75,11 +75,8 @@ export async function structureLogEntry(rawText: string, dateISO: string): Promi
 const entryId = (date: string, summary: string): string =>
   `log:${date}:${createHash('sha256').update(summary).digest('hex').slice(0, 16)}`;
 
-// Structure + embed + upsert a raw day-log. Returns the stored entry.
-export async function logActivity(rawText: string): Promise<StructuredEntry> {
-  const dateISO = istToday();
-  const entry = await structureLogEntry(rawText, dateISO);
-
+// Embed + upsert an already-structured entry (no LLM call). Shared by both paths.
+async function upsertEntry(entry: StructuredEntry): Promise<StructuredEntry> {
   await addDocument(
     entry.summary,
     {
@@ -91,6 +88,22 @@ export async function logActivity(rawText: string): Promise<StructuredEntry> {
     },
     { id: entryId(entry.date, entry.summary), namespace: ACTIVITY_NAMESPACE }
   );
-
   return entry;
+}
+
+// Structure (LLM) + embed + upsert a raw day-log. Returns the stored entry.
+export async function logActivity(rawText: string): Promise<StructuredEntry> {
+  const entry = await structureLogEntry(rawText, istToday());
+  return upsertEntry(entry);
+}
+
+// Fast path: the caller already has a clean third-person summary (e.g. from the
+// KB intent classifier), so skip the second LLM structuring call entirely and
+// just embed + upsert. Cuts the log path from two LLM round-trips down to one.
+export async function logActivityFromSummary(
+  summary: string,
+  category = 'personal'
+): Promise<StructuredEntry> {
+  const entry: StructuredEntry = { date: istToday(), category, summary: summary.trim(), entities: [] };
+  return upsertEntry(entry);
 }
