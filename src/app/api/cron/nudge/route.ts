@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { sendTelegramMessage } from '@/lib/telegram';
+import { env } from '@/lib/env';
 
 // Daily nudge: Vercel Cron hits this to prompt Pavan to log his day.
 // Guarded by CRON_SECRET so only Vercel Cron (which sends it as a Bearer token)
@@ -13,8 +14,8 @@ const NUDGE =
 
 async function handle(request: NextRequest) {
   const auth = request.headers.get('authorization');
-  const expected = `Bearer ${process.env.CRON_SECRET}`;
-  if (!process.env.CRON_SECRET || auth !== expected) {
+  const cronSecret = env('CRON_SECRET');
+  if (!cronSecret || auth !== `Bearer ${cronSecret}`) {
     return new NextResponse('forbidden', { status: 403 });
   }
 

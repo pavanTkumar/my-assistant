@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRedis } from '@/lib/session';
 import { sendTelegramMessage } from '@/lib/telegram';
 import { logActivity } from '@/lib/activityLog';
+import { env } from '@/lib/env';
 
 // Inbound Telegram webhook: receives Pavan's day-log replies and stores them in Pinecone.
 //
@@ -18,7 +19,8 @@ import { logActivity } from '@/lib/activityLog';
 export async function POST(request: NextRequest) {
   // --- Guard 1: shared secret header ---
   const secret = request.headers.get('x-telegram-bot-api-secret-token');
-  if (!process.env.TELEGRAM_WEBHOOK_SECRET || secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+  const expectedSecret = env('TELEGRAM_WEBHOOK_SECRET');
+  if (!expectedSecret || secret !== expectedSecret) {
     return new NextResponse('forbidden', { status: 403 });
   }
 
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
   const updateId = update?.update_id;
 
   // --- Guard 2: owner-only chat ---
-  if (!chatId || String(chatId) !== String(process.env.TELEGRAM_CHAT_ID)) {
+  if (!chatId || String(chatId) !== env('TELEGRAM_CHAT_ID')) {
     // Not the owner — silently ack (do NOT process). 200 so Telegram won't retry.
     return NextResponse.json({ ok: true });
   }

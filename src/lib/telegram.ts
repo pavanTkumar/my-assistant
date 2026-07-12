@@ -1,8 +1,9 @@
 // Telegram Bot notifications — free, instant, no package needed
+import { env } from '@/lib/env';
 
 export async function sendTelegramMessage(text: string): Promise<void> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const token = env('TELEGRAM_BOT_TOKEN');
+  const chatId = env('TELEGRAM_CHAT_ID');
   if (!token || !chatId) {
     console.warn('Telegram not configured: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID missing');
     return;

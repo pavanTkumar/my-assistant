@@ -5,6 +5,7 @@ import OpenAI from 'openai';
 import { similaritySearch } from '@/lib/pinecone';
 import { getAvailableSlots, bookAppointment } from '@/lib/googleCalendar';
 import { sendTelegramMessage, formatBookingNotification, formatContactNotification } from '@/lib/telegram';
+import { env } from '@/lib/env';
 import {
   SESSION_COOKIE,
   verifyCookieValue,
@@ -13,7 +14,7 @@ import {
   recordMessage,
 } from '@/lib/session';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ apiKey: env('OPENAI_API_KEY') });
 
 const CHAT_MODEL = 'gpt-5-mini';
 const RAG_TOP_K = 4;

@@ -4,19 +4,22 @@ import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 // ─── Upstash Redis (HTTP-based — safe on Vercel serverless) ──────────────────
 // Uses REST endpoint + token. Never use a TCP client (ioredis) from a serverless fn.
 //
+// Strip surrounding quotes and whitespace that get pasted into dashboard env
+// fields by mistake (Vercel stores the value literally, quotes included).
+const clean = (v: string | undefined): string =>
+  (v || '').trim().replace(/^["']|["']$/g, '').trim();
+
 // Accept whichever env-var names are present. Vercel's Upstash/KV Marketplace
 // integration injects UPSTASH_REDIS_REST_* or KV_REST_API_* automatically; our
 // local .env.local uses REDIS_URL / REDIS_TOKEN. Any of these work.
 const redisUrl = () =>
-  process.env.REDIS_URL ||
-  process.env.UPSTASH_REDIS_REST_URL ||
-  process.env.KV_REST_API_URL ||
-  '';
+  clean(process.env.REDIS_URL) ||
+  clean(process.env.UPSTASH_REDIS_REST_URL) ||
+  clean(process.env.KV_REST_API_URL);
 const redisToken = () =>
-  process.env.REDIS_TOKEN ||
-  process.env.UPSTASH_REDIS_REST_TOKEN ||
-  process.env.KV_REST_API_TOKEN ||
-  '';
+  clean(process.env.REDIS_TOKEN) ||
+  clean(process.env.UPSTASH_REDIS_REST_TOKEN) ||
+  clean(process.env.KV_REST_API_TOKEN);
 
 let redis: Redis | null = null;
 export const getRedis = (): Redis => {

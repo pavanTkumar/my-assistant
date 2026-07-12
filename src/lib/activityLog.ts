@@ -1,12 +1,13 @@
 import OpenAI from 'openai';
 import { createHash } from 'crypto';
 import { addDocument } from '@/lib/pinecone';
+import { env } from '@/lib/env';
 
 // Daily life-events live in their own namespace so visitor-facing RAG (which
 // queries the default namespace) never sees them unless explicitly opted in.
 export const ACTIVITY_NAMESPACE = 'activity-log';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ apiKey: env('OPENAI_API_KEY') });
 
 // Cheap, single-shot extraction model — no agency needed.
 const STRUCTURE_MODEL = 'gpt-5-nano';

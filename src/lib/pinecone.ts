@@ -1,5 +1,6 @@
 import { Pinecone, Index } from '@pinecone-database/pinecone';
 import fs from 'fs';
+import { env } from '@/lib/env';
 
 // Minimal document shape returned by similaritySearch (previously @langchain/core's Document).
 // Embeddings are generated via a raw Gemini REST call below — no LangChain/Google SDK needed.
@@ -12,7 +13,7 @@ type Document = {
 // Gemini embedding helper — gemini-embedding-001 @ 768 dims (free, no OpenAI credits)
 const getEmbedding = async (text: string): Promise<number[]> => {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${process.env.GOOGLE_GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${env('GOOGLE_GEMINI_API_KEY')}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -31,9 +32,9 @@ export const initPinecone = async (): Promise<Pinecone> => {
   if (!pineconeClient) {
     // Create config and add environment if needed for deployment
     const config: any = {
-      apiKey: process.env.PINECONE_API_KEY || ''
+      apiKey: env('PINECONE_API_KEY'),
     };
-    
+
     pineconeClient = new Pinecone(config);
   }
   return pineconeClient;
@@ -42,7 +43,7 @@ export const initPinecone = async (): Promise<Pinecone> => {
 // Get Pinecone index
 export const getPineconeIndex = async (): Promise<Index> => {
   const pinecone = await initPinecone();
-  return pinecone.index(process.env.PINECONE_INDEX || '');
+  return pinecone.index(env('PINECONE_INDEX'));
 };
 
 // Add document to vector database.
