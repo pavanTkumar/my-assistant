@@ -231,13 +231,12 @@ export default function HomeClient({ userName }: { userName?: string }) {
               setToolStatus({ tool: event.tool, icon: event.icon, label: event.label });
             } else if (event.type === 'status_clear') {
               setToolStatus(null);
-            } else if (event.type === 'reset_text') {
+            } else if (event.type === 'commit_text') {
+              // The assistant narrated a beat before a tool call (e.g. "let me
+              // check his calendar"). Freeze it as its own bubble and open a
+              // fresh one for the post-tool reply.
               fullText = '';
-              setMessages((prev) => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { role: 'assistant', content: '' };
-                return updated;
-              });
+              setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
             } else if (event.type === 'token') {
               fullText += event.content;
               setStreamStarted(true);
@@ -380,10 +379,6 @@ export default function HomeClient({ userName }: { userName?: string }) {
       {!inChat ? (
         <div className={styles.homeCenter}>
           <div className={styles.homeHead}>
-            <div className={styles.indexLabel}>
-              <span className={styles.indexRule} />
-              02 / SESSION
-            </div>
             <div className={styles.greetingLine}>{greeting}</div>
             <div className={styles.homeHeadline}>
               I am here to help<br />with your questions
@@ -429,7 +424,9 @@ export default function HomeClient({ userName }: { userName?: string }) {
             const isStreaming = isLastAssistant && isLoading && streamStarted;
             const isThinking = isLastAssistant && isLoading && !streamStarted && !toolStatus;
             const hasToolStatus = isLastAssistant && isLoading && !!toolStatus;
-            if (!isUser && !message.content && !isLastAssistant) return null;
+            // Skip empty assistant bubbles: committed-but-empty ones (not last),
+            // and a trailing empty bubble once loading has finished.
+            if (!isUser && !message.content && (!isLastAssistant || !isLoading)) return null;
 
             if (isThinking || hasToolStatus) {
               return (

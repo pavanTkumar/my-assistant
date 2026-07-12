@@ -73,11 +73,6 @@ export default function Splash({ onRemember, onSkip }: Props) {
           <span className={styles.wordmark}>THE&nbsp;TEJAVATH</span>
         </div>
 
-        <div className={styles.indexLabel}>
-          <span className={styles.indexRule} />
-          01 / IDENTITY
-        </div>
-
         <div className={styles.tagline}>I&apos;m Pavan&apos;s assistant.</div>
 
         <h1 className={styles.headline}>What should I call you?</h1>
