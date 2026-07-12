@@ -5,6 +5,7 @@ import { env } from '@/lib/env';
 // Minimal document shape returned by similaritySearch (previously @langchain/core's Document).
 // Embeddings are generated via a raw Gemini REST call below — no LangChain/Google SDK needed.
 type Document = {
+  id?: string;
   pageContent: string;
   metadata: Record<string, any>;
   score?: number;
@@ -101,6 +102,7 @@ export const similaritySearch = async (
     });
 
     return results.matches.map((match) => ({
+      id: match.id,
       pageContent: (match.metadata?.text as string) || '',
       metadata: { ...match.metadata },
       score: match.score,
@@ -109,6 +111,32 @@ export const similaritySearch = async (
     console.error('Error searching vector store:', error);
     return [];
   }
+};
+
+// Delete a vector by id. Optionally scope to a namespace.
+export const deleteDocument = async (
+  id: string,
+  opts: { namespace?: string } = {}
+): Promise<void> => {
+  const index = await getPineconeIndex();
+  const target = opts.namespace ? index.namespace(opts.namespace) : index;
+  await target.deleteOne(id);
+};
+
+// Fetch a single vector's stored text + metadata by id (null if not found).
+export const fetchDocument = async (
+  id: string,
+  opts: { namespace?: string } = {}
+): Promise<Document | null> => {
+  const index = await getPineconeIndex();
+  const target = opts.namespace ? index.namespace(opts.namespace) : index;
+  const res = await target.fetch([id]);
+  const rec = res.records?.[id];
+  if (!rec) return null;
+  return {
+    pageContent: (rec.metadata?.text as string) || '',
+    metadata: { ...rec.metadata },
+  };
 };
 
 // NEW FUNCTION: Upload a text file to Pinecone

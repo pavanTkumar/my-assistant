@@ -3,10 +3,11 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedis } from '@/lib/session';
 import { sendTelegramMessage } from '@/lib/telegram';
-import { logActivity } from '@/lib/activityLog';
+import { handleKbMessage } from '@/lib/kbManager';
 import { env } from '@/lib/env';
 
-// Inbound Telegram webhook: receives Pavan's day-log replies and stores them in Pinecone.
+// Inbound Telegram webhook: Pavan messages the bot to manage his knowledge base.
+// Messages are routed by intent (add / log / update / delete / query) — see kbManager.
 //
 // SECURITY (both checks required):
 //  1. The `X-Telegram-Bot-Api-Secret-Token` header must equal TELEGRAM_WEBHOOK_SECRET
@@ -47,8 +48,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // Ignore bot commands like /start.
+  // Bot commands: answer /start and /help with a usage hint; ignore the rest.
   if (text.trim().startsWith('/')) {
+    const cmd = text.trim().split(/\s+/)[0].toLowerCase();
+    if (cmd === '/start' || cmd === '/help') {
+      await sendTelegramMessage(
+        [
+          '👋 *Your knowledge-base assistant.* Just message me naturally:',
+          '',
+          '• *Add a fact:* "I joined Acme as an AI Engineer"',
+          '• *Log your day:* "spent today debugging the RAG pipeline"',
+          '• *Update:* "update my role to Senior AI Engineer"',
+          '• *Delete:* "remove the part about my old job"',
+          '• *Check recall:* "what do you know about my job?"',
+          '',
+          'For updates and deletes I\'ll show you the match and wait for a *yes* before changing anything.',
+        ].join('\n')
+      ).catch((e) => console.error('help message failed:', e?.message));
+    }
     return NextResponse.json({ ok: true });
   }
 
@@ -66,17 +83,13 @@ export async function POST(request: NextRequest) {
     console.error('dedupe check failed (continuing):', e?.message);
   }
 
-  // --- Structure + embed + upsert, then confirm back to Pavan ---
+  // --- Route by intent (add / log / update / delete / query), reply to Pavan ---
   try {
-    const entry = await logActivity(text);
-    await sendTelegramMessage(
-      `✅ *Logged* (${entry.category})\n${entry.summary}${
-        entry.entities.length ? `\n_${entry.entities.join(', ')}_` : ''
-      }`
-    ).catch((e) => console.error('confirm message failed:', e?.message));
+    const reply = await handleKbMessage(text);
+    await sendTelegramMessage(reply).catch((e) => console.error('reply failed:', e?.message));
   } catch (e: any) {
-    console.error('logActivity failed:', e?.message);
-    await sendTelegramMessage("⚠️ Couldn't log that just now — try again in a moment.").catch(() => {});
+    console.error('handleKbMessage failed:', e?.message);
+    await sendTelegramMessage("⚠️ Couldn't process that just now — try again in a moment.").catch(() => {});
   }
 
   // Always 200 so Telegram considers the update delivered.
